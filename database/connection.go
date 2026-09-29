@@ -4,12 +4,18 @@ import (
 	"database/sql"
 	"fmt"
 	"log"
+	"os"
 
 	_ "github.com/jackc/pgx/v5/stdlib"
+	"github.com/joho/godotenv"
 )
 
 func Connect() (*sql.DB, error) {
-	dsn := "postgres://postgres:postgres@localhost:5000/learn_go?sslmode=disable"
+	err := godotenv.Load()
+	if err != nil {
+		log.Printf("Error Read Env")
+	}
+	dsn := os.Getenv("DBASE")
 	db, err := sql.Open("pgx", dsn)
 	if err != nil {
 		log.Printf("Error Connect Dbase %v", err)
