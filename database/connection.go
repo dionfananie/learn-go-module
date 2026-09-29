@@ -15,7 +15,7 @@ func Connect() (*sql.DB, error) {
 	if err != nil {
 		log.Printf("Error Read Env")
 	}
-	dsn := os.Getenv("DBASE")
+	dsn := os.Getenv("DATABASE_URL")
 	db, err := sql.Open("pgx", dsn)
 	if err != nil {
 		log.Printf("Error Connect Dbase %v", err)
