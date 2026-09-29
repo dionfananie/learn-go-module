@@ -3,17 +3,17 @@ package main
 import (
 	"database/sql"
 	"encoding/json"
+	"errors"
 	"fmt"
+	database "learn-go/Database"
 	entities "learn-go/Entities"
 	utility "learn-go/Utils"
 	"log"
 	"net/http"
-
-	_ "modernc.org/sqlite"
 )
 
 func main() {
-	db, err := sql.Open("sqlite", "./app.db")
+	db, err := database.Connect()
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -26,7 +26,7 @@ func main() {
 
 	// create table if not exist
 	_, err = db.Exec(`CREATE TABLE IF NOT EXISTS products(
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        id INTEGER PRIMARY KEY GENERATED ALWAYS AS IDENTITY,
         name TEXT NOT NULL,
         price INTEGER NOT NULL,
         stock INTEGER NOT NULL
@@ -77,7 +77,7 @@ func createProduct(db *sql.DB, w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	result, err := db.Exec(
-		"INSERT INTO products (name, price, stock) VALUES (?, ?, ?)", product.Name, product.Price, product.Stock,
+		"INSERT INTO products (name, price, stock) VALUES ($, $, $)", product.Name, product.Price, product.Stock,
 	)
 	if err != nil {
 		log.Printf("Insert product failed %v", err)
@@ -101,7 +101,7 @@ func getProduct(db *sql.DB, w http.ResponseWriter, r *http.Request) {
 	err := db.QueryRow(
 		"SELECT id, name, price, stock FROM products WHERE id = ?", id).Scan(&product.ID, &product.Name, &product.Price, &product.Stock)
 
-	if err == sql.ErrNoRows {
+	if errors.Is(err, sql.ErrNoRows) {
 		log.Printf("Error fetching product %v", err)
 		utility.JSONError(w, http.StatusNotFound, "Product Not Found")
 		return
@@ -109,7 +109,7 @@ func getProduct(db *sql.DB, w http.ResponseWriter, r *http.Request) {
 
 	if err != nil {
 		log.Printf("Error fetching product %v", err)
-		utility.JSONError(w, http.StatusInternalServerError, "Product Not Found")
+		utility.JSONError(w, http.StatusInternalServerError, "Internal Server Error")
 		return
 	}
 
