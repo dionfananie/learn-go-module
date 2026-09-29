@@ -5,9 +5,9 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	database "learn-go/Database"
-	entities "learn-go/Entities"
-	utility "learn-go/Utils"
+	database "learn-go/database"
+	entities "learn-go/entities"
+	utility "learn-go/utility"
 	"log"
 	"net/http"
 )
@@ -82,12 +82,6 @@ func createProduct(db *sql.DB, w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		log.Printf("Insert product failed %v", err)
 		utility.JSONError(w, http.StatusInternalServerError, "Internal Server Error")
-		return
-	}
-	if err != nil {
-		utility.JSONError(w, http.StatusInternalServerError, "Internal Server Error")
-		log.Printf("Success storing to DB but error when read ID: %v", err)
-
 		return
 	}
 	utility.ResponseJson(w, product)
