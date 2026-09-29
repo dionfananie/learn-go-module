@@ -38,7 +38,7 @@ func main() {
 	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 		fmt.Fprintln(w, "Go running...")
 	})
-	http.HandleFunc("POST /product", func(w http.ResponseWriter, r *http.Request) {
+	http.HandleFunc("POST /products", func(w http.ResponseWriter, r *http.Request) {
 		createProduct(db, w, r)
 	})
 
@@ -67,7 +67,7 @@ func createProduct(db *sql.DB, w http.ResponseWriter, r *http.Request) {
 		utility.JSONError(w, http.StatusBadRequest, "Price must be filled")
 		return
 	}
-	if product.Stock <= 0 {
+	if product.Stock < 0 {
 		utility.JSONError(w, http.StatusBadRequest, "Stock must be filled")
 		return
 	}
@@ -75,6 +75,7 @@ func createProduct(db *sql.DB, w http.ResponseWriter, r *http.Request) {
 		"INSERT INTO products (name, price, stock) VALUES (?, ?, ?)", product.Name, product.Price, product.Stock,
 	)
 	if err != nil {
+		log.Printf("Insert product failed %v", err)
 		utility.JSONError(w, http.StatusInternalServerError, "Internal Server Error")
 		return
 	}
