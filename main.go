@@ -68,7 +68,7 @@ func createProduct(db *sql.DB, w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if product.Stock < 0 {
-		utility.JSONError(w, http.StatusBadRequest, "Stock must be filled")
+		utility.JSONError(w, http.StatusBadRequest, "Stock can't be negative")
 		return
 	}
 	result, err := db.Exec(
