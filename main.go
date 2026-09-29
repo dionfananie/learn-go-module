@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	entities "learn-go/Entities"
+	utility "learn-go/Utils"
 	"log"
 	"net/http"
 
@@ -42,7 +43,10 @@ func main() {
 	})
 
 	fmt.Println("Server running at http://localhost:8080")
-	http.ListenAndServe(":8080", nil)
+
+	if err := http.ListenAndServe(":8080", nil); err != nil {
+		log.Fatalf("server stopped: %v", err)
+	}
 
 }
 
@@ -51,27 +55,32 @@ func createProduct(db *sql.DB, w http.ResponseWriter, r *http.Request) {
 	err := json.NewDecoder(r.Body).Decode(&product)
 
 	if err != nil {
-		http.Error(w, "JSON invalid, check again", http.StatusBadRequest)
+		utility.JSONError(w, http.StatusBadRequest, "JSON invalid, check again")
+
 		return
 	}
 	if product.Name == "" {
-		http.Error(w, "Name must be filled", http.StatusBadRequest)
+		utility.JSONError(w, http.StatusBadRequest, "Name must be filled")
 		return
 	}
 	if product.Price <= 0 {
-		http.Error(w, "Price must be filled", http.StatusBadRequest)
+		utility.JSONError(w, http.StatusBadRequest, "Price must be filled")
+		return
+	}
+	if product.Stock <= 0 {
+		utility.JSONError(w, http.StatusBadRequest, "Stock must be filled")
 		return
 	}
 	result, err := db.Exec(
 		"INSERT INTO products (name, price, stock) VALUES (?, ?, ?)", product.Name, product.Price, product.Stock,
 	)
 	if err != nil {
-		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
+		utility.JSONError(w, http.StatusInternalServerError, "Internal Server Error")
 		return
 	}
 	product.ID, err = result.LastInsertId()
 	if err != nil {
-		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
+		utility.JSONError(w, http.StatusInternalServerError, "Internal Server Error")
 		log.Printf("Success storing to DB but error when read ID: %v", err)
 
 		return
