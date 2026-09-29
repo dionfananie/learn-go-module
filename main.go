@@ -26,7 +26,7 @@ func main() {
 
 	// create table if not exist
 	_, err = db.Exec(`CREATE TABLE IF NOT EXISTS products(
-        id INTEGER PRIMARY KEY GENERATED ALWAYS AS IDENTITY,
+        id INTEGER GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
         name TEXT NOT NULL,
         price INTEGER NOT NULL,
         stock INTEGER NOT NULL
@@ -76,15 +76,14 @@ func createProduct(db *sql.DB, w http.ResponseWriter, r *http.Request) {
 		utility.JSONError(w, http.StatusBadRequest, "Stock can't be negative")
 		return
 	}
-	result, err := db.Exec(
-		"INSERT INTO products (name, price, stock) VALUES ($, $, $)", product.Name, product.Price, product.Stock,
-	)
+	err = db.QueryRow(
+		"INSERT INTO products (name, price, stock) VALUES ($1, $2, $3) RETURNING id", product.Name, product.Price, product.Stock,
+	).Scan(&product.ID)
 	if err != nil {
 		log.Printf("Insert product failed %v", err)
 		utility.JSONError(w, http.StatusInternalServerError, "Internal Server Error")
 		return
 	}
-	product.ID, err = result.LastInsertId()
 	if err != nil {
 		utility.JSONError(w, http.StatusInternalServerError, "Internal Server Error")
 		log.Printf("Success storing to DB but error when read ID: %v", err)
@@ -99,7 +98,7 @@ func getProduct(db *sql.DB, w http.ResponseWriter, r *http.Request) {
 
 	id := r.PathValue("id")
 	err := db.QueryRow(
-		"SELECT id, name, price, stock FROM products WHERE id = ?", id).Scan(&product.ID, &product.Name, &product.Price, &product.Stock)
+		"SELECT id, name, price, stock FROM products WHERE id = $1", id).Scan(&product.ID, &product.Name, &product.Price, &product.Stock)
 
 	if errors.Is(err, sql.ErrNoRows) {
 		log.Printf("Error fetching product %v", err)
