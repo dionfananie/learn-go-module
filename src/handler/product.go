@@ -49,13 +49,8 @@ func (h *ProductHandler) GetProductAll(w http.ResponseWriter, r *http.Request) {
 	product, err := h.service.GetProductAll(r.Context())
 	if err != nil {
 		log.Print(err.Error())
+		utility.JSONError(w, http.StatusInternalServerError, "Internal Server Error")
 
-		switch {
-		case errors.Is(err, service.ErrProductNotFound):
-			utility.JSONError(w, http.StatusNotFound, "Product Not found")
-		default:
-			utility.JSONError(w, http.StatusInternalServerError, "Internal Server Error")
-		}
 		return
 	}
 	utility.ResponseJson(w, product, http.StatusOK)
