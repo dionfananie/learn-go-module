@@ -32,14 +32,14 @@ func main() {
 		log.Fatal(err)
 	}
 
-	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
-		fmt.Fprintln(w, "Go running...")
-	})
-
 	productRepo := repository.NewProductRepository(db)
 	productService := service.NewProductService(productRepo)
 	productHandler := handler.NewProductHandler(productService)
 	router := gin.Default()
+	router.GET("/", func(c *gin.Context) {
+		c.JSON(http.StatusOK, "Running Go")
+		return
+	})
 	router.POST("/products", productHandler.Create)
 	router.GET("/products/:id", productHandler.GetProduct)
 	router.GET("/products", productHandler.GetProductAll)

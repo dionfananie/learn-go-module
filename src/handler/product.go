@@ -5,7 +5,6 @@ import (
 	"errors"
 	"learn-go/src/entities"
 	"learn-go/src/service"
-	"learn-go/src/utility"
 	"log"
 	"net/http"
 
@@ -24,7 +23,7 @@ func (h *ProductHandler) Create(c *gin.Context) {
 	var product entities.Product
 
 	if err := json.NewDecoder(c.Request.Body).Decode(&product); err != nil {
-		utility.JSONError(c.Writer, http.StatusBadRequest, "Invalid JSON")
+		c.JSON(http.StatusBadRequest, "Invalid JSON")
 		return
 	}
 	ctx := c.Request.Context()
