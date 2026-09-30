@@ -16,6 +16,10 @@ func Connect() (*sql.DB, error) {
 		log.Printf("Error Read Env")
 	}
 	dsn := os.Getenv("DATABASE_URL")
+	if dsn == "" {
+		log.Printf("Error Empty string database url")
+		return nil, fmt.Errorf("Error connecting dbase: DATABASE_URL is not set")
+	}
 	db, err := sql.Open("pgx", dsn)
 	if err != nil {
 		log.Printf("Error Connect Dbase %v", err)
