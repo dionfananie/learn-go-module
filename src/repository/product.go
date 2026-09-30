@@ -16,7 +16,7 @@ func NewProductRepository(db *sql.DB) *ProductRepository {
 
 }
 func (r *ProductRepository) Create(ctx context.Context, product *entities.Product) error {
-	err := r.db.QueryRow(
+	err := r.db.QueryRowContext(ctx,
 		"INSERT INTO products (name, price, stock) VALUES ($1, $2, $3) RETURNING id", product.Name, product.Price, product.Stock,
 	).Scan(&product.ID)
 
@@ -28,7 +28,7 @@ func (r *ProductRepository) Create(ctx context.Context, product *entities.Produc
 
 func (r *ProductRepository) GetProductAll(ctx context.Context) ([]entities.Product, error) {
 
-	rows, err := r.db.Query(
+	rows, err := r.db.QueryContext(ctx,
 		"SELECT id, name, price, stock FROM products ORDER BY id")
 	if err != nil {
 		return nil, fmt.Errorf("Error fetching all products %v", err)
@@ -59,7 +59,7 @@ func (r *ProductRepository) GetProductAll(ctx context.Context) ([]entities.Produ
 func (r *ProductRepository) GetProduct(ctx context.Context, id string) (*entities.Product, error) {
 	var product entities.Product
 
-	err := r.db.QueryRow(
+	err := r.db.QueryRowContext(ctx,
 		"SELECT id, name, price, stock FROM products WHERE id = $1", id).Scan(&product.ID, &product.Name, &product.Price, &product.Stock)
 
 	if err != nil {
