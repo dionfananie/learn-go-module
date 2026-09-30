@@ -3,7 +3,6 @@ package repository
 import (
 	"context"
 	"database/sql"
-	"fmt"
 	"learn-go/src/entities"
 )
 
@@ -31,7 +30,7 @@ func (r *ProductRepository) GetProductAll(ctx context.Context) ([]entities.Produ
 	rows, err := r.db.QueryContext(ctx,
 		"SELECT id, name, price, stock FROM products ORDER BY id")
 	if err != nil {
-		return nil, fmt.Errorf("Error fetching all products %v", err)
+		return nil, err
 	}
 	defer rows.Close()
 
