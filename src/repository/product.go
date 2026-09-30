@@ -19,10 +19,7 @@ func (r *ProductRepository) Create(ctx context.Context, product *entities.Produc
 		"INSERT INTO products (name, price, stock) VALUES ($1, $2, $3) RETURNING id", product.Name, product.Price, product.Stock,
 	).Scan(&product.ID)
 
-	if err != nil {
-		return err
-	}
-	return nil
+	return err
 }
 
 func (r *ProductRepository) GetProductAll(ctx context.Context) ([]entities.Product, error) {
