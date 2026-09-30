@@ -3,9 +3,9 @@ package handler
 import (
 	"encoding/json"
 	"errors"
-	"learn-go/entities"
-	"learn-go/service"
-	"learn-go/utility"
+	"learn-go/src/entities"
+	"learn-go/src/service"
+	"learn-go/src/utility"
 	"net/http"
 )
 

@@ -3,8 +3,8 @@ package service
 import (
 	"context"
 	"errors"
-	"learn-go/entities"
-	"learn-go/repository"
+	"learn-go/src/entities"
+	"learn-go/src/repository"
 )
 
 var (

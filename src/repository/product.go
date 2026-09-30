@@ -3,7 +3,7 @@ package repository
 import (
 	"context"
 	"database/sql"
-	"learn-go/entities"
+	"learn-go/src/entities"
 )
 
 type ProductRepository struct {
