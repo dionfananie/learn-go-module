@@ -41,7 +41,7 @@ func (h *ProductHandler) Create(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	utility.ResponseJson(w, product)
+	utility.ResponseJson(w, product, http.StatusCreated)
 
 }
 
@@ -58,7 +58,7 @@ func (h *ProductHandler) GetProductAll(w http.ResponseWriter, r *http.Request) {
 		}
 		return
 	}
-	utility.ResponseJson(w, product)
+	utility.ResponseJson(w, product, http.StatusOK)
 
 }
 
@@ -75,6 +75,6 @@ func (h *ProductHandler) GetProduct(w http.ResponseWriter, r *http.Request) {
 		}
 		return
 	}
-	utility.ResponseJson(w, product)
+	utility.ResponseJson(w, product, http.StatusOK)
 
 }
