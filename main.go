@@ -3,33 +3,29 @@ package main
 import (
 	"database/sql"
 	"encoding/json"
+	"errors"
 	"fmt"
-	entities "learn-go/Entities"
-	utility "learn-go/Utils"
+	database "learn-go/database"
+	entities "learn-go/entities"
+	utility "learn-go/utility"
 	"log"
 	"net/http"
-
-	_ "modernc.org/sqlite"
 )
 
 func main() {
-	db, err := sql.Open("sqlite", "./app.db")
+	db, err := database.Connect()
 	if err != nil {
 		log.Fatal(err)
 	}
 	defer db.Close()
-
-	if err := db.Ping(); err != nil {
-		log.Fatal(err)
-	}
 	fmt.Println("DB Connected!")
 
 	// create table if not exist
 	_, err = db.Exec(`CREATE TABLE IF NOT EXISTS products(
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        id INTEGER GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
         name TEXT NOT NULL,
-        price INTEGER NOT NULL,
-        stock INTEGER NOT NULL
+        price INTEGER NOT NULL CHECK (price > 0),
+        stock INTEGER NOT NULL CHECK (stock >= 0)
     )`)
 
 	if err != nil {
@@ -69,26 +65,19 @@ func createProduct(db *sql.DB, w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if product.Price <= 0 {
-		utility.JSONError(w, http.StatusBadRequest, "Price must be filled")
+		utility.JSONError(w, http.StatusBadRequest, "Price can't be negative or empty")
 		return
 	}
 	if product.Stock < 0 {
 		utility.JSONError(w, http.StatusBadRequest, "Stock can't be negative")
 		return
 	}
-	result, err := db.Exec(
-		"INSERT INTO products (name, price, stock) VALUES (?, ?, ?)", product.Name, product.Price, product.Stock,
-	)
+	err = db.QueryRow(
+		"INSERT INTO products (name, price, stock) VALUES ($1, $2, $3) RETURNING id", product.Name, product.Price, product.Stock,
+	).Scan(&product.ID)
 	if err != nil {
 		log.Printf("Insert product failed %v", err)
 		utility.JSONError(w, http.StatusInternalServerError, "Internal Server Error")
-		return
-	}
-	product.ID, err = result.LastInsertId()
-	if err != nil {
-		utility.JSONError(w, http.StatusInternalServerError, "Internal Server Error")
-		log.Printf("Success storing to DB but error when read ID: %v", err)
-
 		return
 	}
 	utility.ResponseJson(w, product)
@@ -99,9 +88,9 @@ func getProduct(db *sql.DB, w http.ResponseWriter, r *http.Request) {
 
 	id := r.PathValue("id")
 	err := db.QueryRow(
-		"SELECT id, name, price, stock FROM products WHERE id = ?", id).Scan(&product.ID, &product.Name, &product.Price, &product.Stock)
+		"SELECT id, name, price, stock FROM products WHERE id = $1", id).Scan(&product.ID, &product.Name, &product.Price, &product.Stock)
 
-	if err == sql.ErrNoRows {
+	if errors.Is(err, sql.ErrNoRows) {
 		log.Printf("Error fetching product %v", err)
 		utility.JSONError(w, http.StatusNotFound, "Product Not Found")
 		return
@@ -109,7 +98,7 @@ func getProduct(db *sql.DB, w http.ResponseWriter, r *http.Request) {
 
 	if err != nil {
 		log.Printf("Error fetching product %v", err)
-		utility.JSONError(w, http.StatusInternalServerError, "Product Not Found")
+		utility.JSONError(w, http.StatusInternalServerError, "Internal Server Error")
 		return
 	}
 
