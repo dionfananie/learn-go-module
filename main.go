@@ -64,7 +64,7 @@ func createProduct(db *sql.DB, w http.ResponseWriter, r *http.Request) {
 		utility.JSONError(w, http.StatusBadRequest, "Name must be filled")
 		return
 	}
-	if product.Price < 0 {
+	if product.Price > 0 {
 		utility.JSONError(w, http.StatusBadRequest, "Price can't be negative")
 		return
 	}
