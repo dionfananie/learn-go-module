@@ -24,7 +24,7 @@ func main() {
 	_, err = db.Exec(`CREATE TABLE IF NOT EXISTS products(
         id INTEGER GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
         name TEXT NOT NULL,
-        price INTEGER NOT NULL CHECK (price >= 0),
+        price INTEGER NOT NULL CHECK (price > 0),
         stock INTEGER NOT NULL CHECK (stock >= 0)
     )`)
 
@@ -64,8 +64,8 @@ func createProduct(db *sql.DB, w http.ResponseWriter, r *http.Request) {
 		utility.JSONError(w, http.StatusBadRequest, "Name must be filled")
 		return
 	}
-	if product.Price > 0 {
-		utility.JSONError(w, http.StatusBadRequest, "Price can't be negative")
+	if product.Price <= 0 {
+		utility.JSONError(w, http.StatusBadRequest, "Price can't be negative or empty")
 		return
 	}
 	if product.Stock < 0 {
