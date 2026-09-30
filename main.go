@@ -2,7 +2,6 @@ package main
 
 import (
 	"database/sql"
-	"encoding/json"
 	"errors"
 	"fmt"
 	database "learn-go/database"
@@ -54,38 +53,6 @@ func main() {
 	if err := http.ListenAndServe(":8080", nil); err != nil {
 		log.Fatalf("server stopped: %v", err)
 	}
-
-}
-
-func createProduct(db *sql.DB, w http.ResponseWriter, r *http.Request) {
-	var product entities.Product
-	err := json.NewDecoder(r.Body).Decode(&product)
-
-	if err != nil {
-		utility.JSONError(w, http.StatusBadRequest, "JSON invalid, check again")
-		return
-	}
-	if product.Name == "" {
-		utility.JSONError(w, http.StatusBadRequest, "Name must be filled")
-		return
-	}
-	if product.Price <= 0 {
-		utility.JSONError(w, http.StatusBadRequest, "Price can't be negative or empty")
-		return
-	}
-	if product.Stock < 0 {
-		utility.JSONError(w, http.StatusBadRequest, "Stock can't be negative")
-		return
-	}
-	err = db.QueryRow(
-		"INSERT INTO products (name, price, stock) VALUES ($1, $2, $3) RETURNING id", product.Name, product.Price, product.Stock,
-	).Scan(&product.ID)
-	if err != nil {
-		log.Printf("Insert product failed %v", err)
-		utility.JSONError(w, http.StatusInternalServerError, "Internal Server Error")
-		return
-	}
-	utility.ResponseJson(w, product)
 }
 
 func getProduct(db *sql.DB, w http.ResponseWriter, r *http.Request) {
