@@ -7,6 +7,9 @@ import (
 	"fmt"
 	database "learn-go/database"
 	entities "learn-go/entities"
+	"learn-go/handler"
+	"learn-go/repository"
+	"learn-go/service"
 	utility "learn-go/utility"
 	"log"
 	"net/http"
@@ -31,12 +34,14 @@ func main() {
 	if err != nil {
 		log.Fatal(err)
 	}
+	productRepo := repository.NewProductRepository(db)
+	productService := service.NewProductService(productRepo)
+	productHandler := handler.NewProductHandler(productService)
+
 	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 		fmt.Fprintln(w, "Go running...")
 	})
-	http.HandleFunc("POST /products", func(w http.ResponseWriter, r *http.Request) {
-		createProduct(db, w, r)
-	})
+	http.HandleFunc("POST /products", productHandler.Create)
 	http.HandleFunc("GET /products/{id}", func(w http.ResponseWriter, r *http.Request) {
 		getProduct(db, w, r)
 	})
