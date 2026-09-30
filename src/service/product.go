@@ -2,15 +2,11 @@ package service
 
 import (
 	"context"
+	"database/sql"
 	"errors"
 	"learn-go/src/entities"
 	"learn-go/src/repository"
-)
-
-var (
-	ErrProductNameRequired = errors.New("product name is required")
-	ErrProductPriceInvalid = errors.New("product price must be greater than 0")
-	ErrProductStockInvalid = errors.New("product stock cannot be negative")
+	"log"
 )
 
 type ProductService struct {
@@ -34,4 +30,32 @@ func (s *ProductService) Create(ctx context.Context, product *entities.Product) 
 		return ErrProductStockInvalid
 	}
 	return s.repo.Create(ctx, product)
+}
+
+func (s *ProductService) GetProductAll(ctx context.Context) ([]entities.Product, error) {
+	products, err := s.repo.GetProductAll(ctx)
+	if errors.Is(err, sql.ErrNoRows) {
+		log.Print(err)
+		return nil, ErrProductNotFound
+	}
+
+	if err != nil {
+		log.Print(err)
+		return nil, err
+	}
+	return products, nil
+}
+
+func (s *ProductService) GetProduct(ctx context.Context, id string) (*entities.Product, error) {
+	product, err := s.repo.GetProduct(ctx, id)
+	if errors.Is(err, sql.ErrNoRows) {
+		log.Print(err)
+		return nil, ErrProductNotFound
+	}
+	if err != nil {
+		log.Print(err)
+
+		return nil, err
+	}
+	return product, nil
 }

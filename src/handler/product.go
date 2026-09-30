@@ -6,6 +6,7 @@ import (
 	"learn-go/src/entities"
 	"learn-go/src/service"
 	"learn-go/src/utility"
+	"log"
 	"net/http"
 )
 
@@ -40,6 +41,28 @@ func (h *ProductHandler) Create(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	utility.ResponseJson(w, product)
+
+}
+
+func (h *ProductHandler) GetProductAll(w http.ResponseWriter, r *http.Request) {
+	product, err := h.service.GetProductAll(r.Context())
+	if err != nil {
+		log.Print(err.Error())
+		utility.JSONError(w, http.StatusNotFound, err.Error())
+		return
+	}
+	utility.ResponseJson(w, product)
+
+}
+
+func (h *ProductHandler) GetProduct(w http.ResponseWriter, r *http.Request) {
+	product, err := h.service.GetProduct(r.Context(), r.PathValue("id"))
+	if err != nil {
+		log.Print(err.Error())
+		utility.JSONError(w, http.StatusNotFound, err.Error())
+		return
+	}
 	utility.ResponseJson(w, product)
 
 }

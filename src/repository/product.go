@@ -3,6 +3,7 @@ package repository
 import (
 	"context"
 	"database/sql"
+	"fmt"
 	"learn-go/src/entities"
 )
 
@@ -23,4 +24,48 @@ func (r *ProductRepository) Create(ctx context.Context, product *entities.Produc
 		return err
 	}
 	return nil
+}
+
+func (r *ProductRepository) GetProductAll(ctx context.Context) ([]entities.Product, error) {
+
+	rows, err := r.db.Query(
+		"SELECT id, name, price, stock FROM products ORDER BY id")
+	if err != nil {
+		return nil, fmt.Errorf("Error fetching all products %v", err)
+	}
+	defer rows.Close()
+
+	products := make([]entities.Product, 0)
+
+	for rows.Next() {
+		var product entities.Product
+		if err := rows.Scan(
+			&product.ID,
+			&product.Name,
+			&product.Price,
+			&product.Stock,
+		); err != nil {
+			return nil, err
+		}
+		products = append(products, product)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+
+	}
+	return products, nil
+}
+
+func (r *ProductRepository) GetProduct(ctx context.Context, id string) (*entities.Product, error) {
+	var product entities.Product
+
+	err := r.db.QueryRow(
+		"SELECT id, name, price, stock FROM products WHERE id = $1", id).Scan(&product.ID, &product.Name, &product.Price, &product.Stock)
+
+	if err != nil {
+		return nil, err
+
+	}
+
+	return &product, nil
 }
