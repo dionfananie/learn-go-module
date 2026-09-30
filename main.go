@@ -8,6 +8,8 @@ import (
 	"learn-go/src/service"
 	"log"
 	"net/http"
+
+	"github.com/gin-gonic/gin"
 )
 
 func main() {
@@ -37,14 +39,14 @@ func main() {
 	productRepo := repository.NewProductRepository(db)
 	productService := service.NewProductService(productRepo)
 	productHandler := handler.NewProductHandler(productService)
-
-	http.HandleFunc("POST /products", productHandler.Create)
-	http.HandleFunc("GET /products/{id}", productHandler.GetProduct)
-	http.HandleFunc("GET /products", productHandler.GetProductAll)
+	router := gin.Default()
+	router.POST("/products", productHandler.Create)
+	router.GET("/products/:id", productHandler.GetProduct)
+	router.GET("/products", productHandler.GetProductAll)
 
 	fmt.Println("Server running at http://localhost:8080")
 
-	if err := http.ListenAndServe(":8080", nil); err != nil {
+	if err := router.Run(":8080"); err != nil {
 		log.Fatalf("server stopped: %v", err)
 	}
 }

@@ -8,6 +8,8 @@ import (
 	"learn-go/src/utility"
 	"log"
 	"net/http"
+
+	"github.com/gin-gonic/gin"
 )
 
 type ProductHandler struct {
@@ -18,58 +20,56 @@ func NewProductHandler(s *service.ProductService) *ProductHandler {
 	return &ProductHandler{s}
 }
 
-func (h *ProductHandler) Create(w http.ResponseWriter, r *http.Request) {
+func (h *ProductHandler) Create(c *gin.Context) {
 	var product entities.Product
 
-	if err := json.NewDecoder(r.Body).Decode(&product); err != nil {
-		utility.JSONError(w, http.StatusBadRequest, "Invalid JSON")
+	if err := json.NewDecoder(c.Request.Body).Decode(&product); err != nil {
+		utility.JSONError(c.Writer, http.StatusBadRequest, "Invalid JSON")
 		return
 	}
-
-	err := h.service.Create(r.Context(), &product)
+	ctx := c.Request.Context()
+	err := h.service.Create(ctx, &product)
 	if err != nil {
 		switch {
 		case errors.Is(err, service.ErrProductNameRequired):
-			utility.JSONError(w, http.StatusBadRequest, err.Error())
 		case errors.Is(err, service.ErrProductPriceInvalid):
-			utility.JSONError(w, http.StatusBadRequest, err.Error())
 		case errors.Is(err, service.ErrProductStockInvalid):
-			utility.JSONError(w, http.StatusBadRequest, err.Error())
+			c.JSON(http.StatusBadRequest, err.Error())
 		default:
-			utility.JSONError(w, http.StatusInternalServerError, "Internal Server Error")
+			c.JSON(http.StatusInternalServerError, "Internal Server Error")
+			return
 		}
-		return
 	}
 
-	utility.ResponseJson(w, product, http.StatusCreated)
+	c.JSON(http.StatusCreated, product)
 
 }
 
-func (h *ProductHandler) GetProductAll(w http.ResponseWriter, r *http.Request) {
-	product, err := h.service.GetProductAll(r.Context())
+func (h *ProductHandler) GetProductAll(c *gin.Context) {
+	product, err := h.service.GetProductAll(c.Request.Context())
 	if err != nil {
 		log.Print(err.Error())
-		utility.JSONError(w, http.StatusInternalServerError, "Internal Server Error")
-
+		c.JSON(http.StatusInternalServerError, "Internal Server Error")
 		return
 	}
-	utility.ResponseJson(w, product, http.StatusOK)
+	c.JSON(http.StatusOK, product)
 
 }
 
-func (h *ProductHandler) GetProduct(w http.ResponseWriter, r *http.Request) {
-	product, err := h.service.GetProduct(r.Context(), r.PathValue("id"))
+func (h *ProductHandler) GetProduct(c *gin.Context) {
+	product, err := h.service.GetProduct(c.Request.Context(), c.Param("id"))
 	if err != nil {
 		log.Print(err.Error())
 
 		switch {
 		case errors.Is(err, service.ErrProductNotFound):
-			utility.JSONError(w, http.StatusNotFound, "Product Not found")
+			c.JSON(http.StatusNotFound, "Product Not found")
 		default:
-			utility.JSONError(w, http.StatusInternalServerError, "Internal Server Error")
+			c.JSON(http.StatusInternalServerError, "Internal Server Error")
+
 		}
 		return
 	}
-	utility.ResponseJson(w, product, http.StatusOK)
+	c.JSON(http.StatusOK, product)
 
 }
