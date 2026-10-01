@@ -60,10 +60,9 @@ func (u *UserHandler) Login(c *gin.Context) {
 	if err != nil {
 		fmt.Printf("[Error]- Login User %v\n", err.Error())
 		switch {
-		case errors.Is(err, service.ErrUserNotFound):
-			c.JSON(http.StatusNotFound, gin.H{"error": "User not found"})
-		case errors.Is(err, service.ErrInvalidCredentials):
-			c.JSON(http.StatusNotFound, gin.H{"error": "Password is wrong"})
+		case errors.Is(err, service.ErrUserNotFound),
+			errors.Is(err, service.ErrInvalidCredentials):
+			c.JSON(http.StatusUnauthorized, gin.H{"error": "User or Password is wrong"})
 		default:
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "Internal Server Error"})
 		}
