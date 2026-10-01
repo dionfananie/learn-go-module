@@ -11,5 +11,32 @@ services:
     volumes:
       - postgres_data:/var/lib/postgresql/data
 
+  influxdb:
+    image: influxdb:1.8
+    container_name: learn-go-influxdb
+    environment:
+      INFLUXDB_DB: k6
+    ports:
+      - "8086:8086"
+    volumes:
+      - influxdb_data:/var/lib/influxdb
+
+  grafana:
+    image: grafana/grafana-oss:11.4.0
+    container_name: learn-go-grafana
+    environment:
+      GF_SECURITY_ADMIN_USER: admin
+      GF_SECURITY_ADMIN_PASSWORD: admin
+    ports:
+      - "3000:3000"
+    volumes:
+      - grafana_data:/var/lib/grafana
+      - ./grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./grafana/dashboards:/var/lib/grafana/dashboards:ro
+    depends_on:
+      - influxdb
+
 volumes:
   postgres_data:
+  influxdb_data:
+  grafana_data:

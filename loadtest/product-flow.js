@@ -19,9 +19,10 @@ export const options = {
       stages: SMOKE
         ? [{ duration: '5s', target: 2 }]
         : [
-          { duration: '15s', target: 100 }, // ramp-up
-          { duration: '10s', target: 500 }, // steady
-          { duration: '10s', target: 200 }, // ramp-down
+          { duration: '10s', target: 300 }, // ramp-up
+          { duration: '15s', target: 1500 }, // steady
+          { duration: '25s', target: 5500 }, // steady
+          { duration: '10s', target: 500 }, // ramp-down
         ],
       gracefulRampDown: '10s',
     },
