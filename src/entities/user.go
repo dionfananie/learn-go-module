@@ -16,3 +16,8 @@ type UserResponse struct {
 	AccessToken string    `json:"access_token"`
 	CreatedAt   time.Time `json:"created_at"`
 }
+
+type UserLoginRequest struct {
+	Name     string `json:"name" binding:"required"`
+	Password string `json:"password" binding:"required,min=8,max=20"`
+}

@@ -44,3 +44,26 @@ func (u *UserHandler) Register(c *gin.Context) {
 	})
 
 }
+func (u *UserHandler) Login(c *gin.Context) {
+	var user entities.UserLoginRequest
+	if err := c.ShouldBindJSON(&user); err != nil {
+		fmt.Printf("Error &w", err.Error())
+		var ve validator.ValidationErrors
+		if errors.As(err, &ve) {
+			c.JSON(http.StatusBadRequest, gin.H{"error": utility.BindMessage(ve)})
+			return
+		}
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Request Body is invalid JSON"})
+		return
+	}
+	userResponse, err := u.service.LoginUser(c.Request.Context(), &user)
+	if err != nil {
+		fmt.Printf("Error &w", err.Error())
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Internal Server Error"})
+		return
+	}
+
+	c.JSON(http.StatusCreated, gin.H{"message": "User Found",
+		"data": userResponse,
+	})
+}

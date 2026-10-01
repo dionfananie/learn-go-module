@@ -24,3 +24,13 @@ func (r *UsersRepository) RegisterUser(ctx context.Context, user *entities.User)
 
 	return &resp, nil
 }
+
+func (r *UsersRepository) LoginUser(ctx context.Context, user *entities.UserLoginRequest) (*entities.User, error) {
+	var u entities.User
+
+	err := r.db.QueryRowContext(ctx, "SELECT id, name, password, created_at FROM users WHERE name = $1", user.Name).Scan(&u.ID, &u.Name, &u.Password, &u.CreatedAt)
+	if err != nil {
+		return nil, err
+	}
+	return &u, nil
+}

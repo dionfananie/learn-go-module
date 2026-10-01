@@ -37,6 +37,7 @@ func main() {
 	userService := service.NewUserService(userRepo)
 	userHandler := handler.NewUserHandler(userService)
 	router.POST("/register", userHandler.Register)
+	router.POST("/login", userHandler.Login)
 	fmt.Println("Server running at http://localhost:8080")
 
 	if err := router.Run(":8080"); err != nil {

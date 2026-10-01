@@ -2,6 +2,8 @@ package service
 
 import (
 	"context"
+	"database/sql"
+	"errors"
 	"learn-go/src/entities"
 	jwt "learn-go/src/helpers"
 	"learn-go/src/helpers/password"
@@ -29,4 +31,23 @@ func (s *UserService) Register(ctx context.Context, user *entities.User) (*entit
 
 	userResponse.AccessToken = jwt.Generate(&jwt.TokenPayload{UserId: userResponse.ID})
 	return userResponse, nil
+}
+
+func (s *UserService) LoginUser(ctx context.Context, user *entities.UserLoginRequest) (*entities.UserResponse, error) {
+	userResponse, err := s.repo.LoginUser(ctx, user)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return nil, ErrUserNotFound
+		}
+		return nil, err
+	}
+	if err := password.Verify(userResponse.Password, user.Password); err != nil {
+		return nil, err
+	}
+	return &entities.UserResponse{
+			ID:          userResponse.ID,
+			Name:        userResponse.Name,
+			AccessToken: jwt.Generate(&jwt.TokenPayload{userResponse.ID}),
+			CreatedAt:   userResponse.CreatedAt},
+		nil
 }
