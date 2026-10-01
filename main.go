@@ -4,6 +4,7 @@ import (
 	"fmt"
 	database "learn-go/src/database"
 	"learn-go/src/handler"
+	"learn-go/src/middleware"
 	"learn-go/src/repository"
 	"learn-go/src/service"
 	"log"
@@ -19,18 +20,11 @@ func main() {
 	defer db.Close()
 	fmt.Println("DB Connected!")
 
-	productRepo := repository.NewProductRepository(db)
-	productService := service.NewProductService(productRepo)
-	productHandler := handler.NewProductHandler(productService)
-
 	router := gin.Default()
 	router.GET("/", func(c *gin.Context) {
 		c.String(200, "Running Go")
 		return
 	})
-	router.POST("/products", productHandler.Create)
-	router.GET("/products/:id", productHandler.GetProduct)
-	router.GET("/products", productHandler.GetProductAll)
 
 	// register user
 	userRepo := repository.NewUserRepository(db)
@@ -38,6 +32,18 @@ func main() {
 	userHandler := handler.NewUserHandler(userService)
 	router.POST("/register", userHandler.Register)
 	router.POST("/login", userHandler.Login)
+
+	productRepo := repository.NewProductRepository(db)
+	productService := service.NewProductService(productRepo)
+	productHandler := handler.NewProductHandler(productService)
+
+	router.GET("/products/:id", productHandler.GetProduct)
+	router.GET("/products", productHandler.GetProductAll)
+
+	protected := router.Group("/")
+	protected.Use(middleware.AuthMiddleware())
+
+	protected.POST("/products", productHandler.Create)
 	fmt.Println("Server running at http://localhost:8080")
 
 	if err := router.Run(":8080"); err != nil {

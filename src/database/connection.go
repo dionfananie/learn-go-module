@@ -19,8 +19,8 @@ func Connect() (*sql.DB, error) {
 
 	strConnection := fmt.Sprintf("postgres://%v:%v@%v:%v/%v?%v", config.DB_USERNAME, config.DB_PASSWORD, config.DB_HOST, config.DB_PORT, config.DB_NAME, config.DB_PARAMS)
 	// Define connection pool parameters (adjust as needed)
-	maxOpenConns := 20 // Maximum number of open connections in the pool
-	maxIdleConns := 10 // Maximum number of idle connections in the pool
+	maxOpenConns := 100 // Maximum number of open connections in the pool
+	maxIdleConns := 10  // Maximum number of idle connections in the pool
 	db, err := sql.Open("pgx", strConnection)
 	if err != nil {
 		log.Printf("Error Connect Dbase %v", err)
