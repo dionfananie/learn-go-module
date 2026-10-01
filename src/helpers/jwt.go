@@ -54,7 +54,7 @@ func Verify(token string) (*TokenPayload, error) {
 
 	claims, ok := parsed.Claims.(jwt.MapClaims)
 	if !ok {
-		return nil, err
+		return nil, fmt.Errorf("Error verify password")
 	}
 
 	id, ok := claims["userId"].(string)

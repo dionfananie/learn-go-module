@@ -7,4 +7,5 @@ var (
 	ErrUserNameRequired     = errors.New("user name is required")
 	ErrUserPasswordRequired = errors.New("user password must be filled")
 	ErrUserPhoneRequired    = errors.New("user phone must be filled")
+	ErrInvalidCredentials   = errors.New("invalid password")
 )

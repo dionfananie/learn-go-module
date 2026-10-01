@@ -40,7 +40,7 @@ func (s *ProductService) GetProductAll(ctx context.Context) ([]entities.Product,
 	return products, nil
 }
 
-func (s *ProductService) GetProduct(ctx context.Context, id string) (*entities.Product, error) {
+func (s *ProductService) GetProduct(ctx context.Context, id int) (*entities.Product, error) {
 	product, err := s.repo.GetProduct(ctx, id)
 
 	if errors.Is(err, sql.ErrNoRows) {

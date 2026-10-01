@@ -23,7 +23,7 @@ func (u *UserHandler) Register(c *gin.Context) {
 	var user entities.User
 
 	if err := c.ShouldBindJSON(&user); err != nil {
-		fmt.Printf("Error &w", err.Error())
+		fmt.Printf("[Error]- Register User %v\n", err.Error())
 		var ve validator.ValidationErrors
 		if errors.As(err, &ve) {
 			c.JSON(http.StatusBadRequest, gin.H{"error": utility.BindMessage(ve)})
@@ -34,7 +34,7 @@ func (u *UserHandler) Register(c *gin.Context) {
 	}
 	userResponse, err := u.service.Register(c.Request.Context(), &user)
 	if err != nil {
-		fmt.Printf("Error &w", err.Error())
+		fmt.Printf("[Error]- Register User %v\n", err.Error())
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Internal Server Error"})
 		return
 	}
@@ -47,7 +47,7 @@ func (u *UserHandler) Register(c *gin.Context) {
 func (u *UserHandler) Login(c *gin.Context) {
 	var user entities.UserLoginRequest
 	if err := c.ShouldBindJSON(&user); err != nil {
-		fmt.Printf("Error &w", err.Error())
+		fmt.Printf("[Error]- Login User %v\n", err.Error())
 		var ve validator.ValidationErrors
 		if errors.As(err, &ve) {
 			c.JSON(http.StatusBadRequest, gin.H{"error": utility.BindMessage(ve)})
@@ -58,12 +58,19 @@ func (u *UserHandler) Login(c *gin.Context) {
 	}
 	userResponse, err := u.service.LoginUser(c.Request.Context(), &user)
 	if err != nil {
-		fmt.Printf("Error &w", err.Error())
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Internal Server Error"})
+		fmt.Printf("[Error]- Login User %v\n", err.Error())
+		switch {
+		case errors.Is(err, service.ErrUserNotFound):
+			c.JSON(http.StatusNotFound, gin.H{"error": "User not found"})
+		case errors.Is(err, service.ErrInvalidCredentials):
+			c.JSON(http.StatusNotFound, gin.H{"error": "Password is wrong"})
+		default:
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "Internal Server Error"})
+		}
 		return
 	}
 
-	c.JSON(http.StatusCreated, gin.H{"message": "User Found",
+	c.JSON(http.StatusOK, gin.H{"message": "User Found",
 		"data": userResponse,
 	})
 }

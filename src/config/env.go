@@ -19,9 +19,8 @@ var (
 	DB_PASSWORD = getEnv("DB_PASSWORD", "")
 	DB_PARAMS   = getEnv("DB_PARAMS", "sslmode=disable")
 
-	JWT_SECRET  = getEnv("JWT_SECRET", "")
-	JWT_EXP     = getEnv("JWT_EXP", "8h")
-	BCRYPT_SALT = getEnvAsInt("BCRYPT_SALT", 8)
+	JWT_SECRET = getEnv("JWT_SECRET", "")
+	JWT_EXP    = getEnv("JWT_EXP", "8h")
 )
 
 func loadEnv() {

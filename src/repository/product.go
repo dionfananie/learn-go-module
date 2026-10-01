@@ -52,7 +52,7 @@ func (r *ProductRepository) GetProductAll(ctx context.Context) ([]entities.Produ
 	return products, nil
 }
 
-func (r *ProductRepository) GetProduct(ctx context.Context, id string) (*entities.Product, error) {
+func (r *ProductRepository) GetProduct(ctx context.Context, id int) (*entities.Product, error) {
 	var product entities.Product
 
 	err := r.db.QueryRowContext(ctx,

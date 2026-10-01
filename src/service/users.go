@@ -42,7 +42,7 @@ func (s *UserService) LoginUser(ctx context.Context, user *entities.UserLoginReq
 		return nil, err
 	}
 	if err := password.Verify(userResponse.Password, user.Password); err != nil {
-		return nil, err
+		return nil, ErrInvalidCredentials
 	}
 	return &entities.UserResponse{
 			ID:          userResponse.ID,
