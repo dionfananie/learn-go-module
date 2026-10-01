@@ -48,7 +48,7 @@ func main() {
 
 	repo := repository.NewProductRepository(db)
 	ctx := context.Background()
-	r := rand.New(rand.NewSource(42)) // seed tetap, biar hasil reproducible
+	r := rand.New(rand.NewSource(250)) // seed tetap, biar hasil reproducible
 
 	var success, failed int
 
