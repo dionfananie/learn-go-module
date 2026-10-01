@@ -14,11 +14,13 @@ func NewUserRepository(db *sql.DB) *UsersRepository {
 	return &UsersRepository{db}
 }
 
-func (r *UsersRepository) RegisterUser(ctx context.Context, user *entities.User) (string, error) {
+func (r *UsersRepository) RegisterUser(ctx context.Context, user *entities.User) (*entities.UserResponse, error) {
+	var resp entities.UserResponse
 	err := r.db.QueryRowContext(ctx,
-		"INSERT INTO users (name, password, phone_number) VALUES($1, $2, $3) RETURNING id", user.Name, user.Password, user.PhoneNumber).Scan(&user.ID)
+		"INSERT INTO users (name, password, phone_number) VALUES($1, $2, $3) RETURNING id, name, created_at", user.Name, user.Password, user.PhoneNumber).Scan(&resp.ID, &resp.Name, &resp.CreatedAt)
 	if err != nil {
-		return "", err
+		return nil, err
 	}
-	return user.ID, nil
+
+	return &resp, nil
 }

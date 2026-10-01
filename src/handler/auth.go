@@ -32,7 +32,7 @@ func (u *UserHandler) Register(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "Request Body is invalid JSON"})
 		return
 	}
-	accessToken, err := u.service.Register(c.Request.Context(), &user)
+	userResponse, err := u.service.Register(c.Request.Context(), &user)
 	if err != nil {
 		fmt.Printf("Error &w", err.Error())
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Internal Server Error"})
@@ -40,12 +40,7 @@ func (u *UserHandler) Register(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusCreated, gin.H{"message": "User succesfully registered",
-		"data": gin.H{
-			"user_id":      user.ID,
-			"name":         user.Name,
-			"created_at":   user.CreatedAt,
-			"access_token": accessToken,
-		},
+		"data": userResponse,
 	})
 
 }

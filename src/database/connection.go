@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"learn-go/src/config"
 	"log"
-	"os"
 
 	_ "github.com/jackc/pgx/v5/stdlib"
 	"github.com/joho/godotenv"
@@ -22,11 +21,6 @@ func Connect() (*sql.DB, error) {
 	// Define connection pool parameters (adjust as needed)
 	maxOpenConns := 20 // Maximum number of open connections in the pool
 	maxIdleConns := 10 // Maximum number of idle connections in the pool
-	dsn := os.Getenv("DATABASE_URL")
-	if dsn == "" {
-		log.Printf("Error Empty string database url")
-		return nil, fmt.Errorf("Error connecting dbase: DATABASE_URL is not set")
-	}
 	db, err := sql.Open("pgx", strConnection)
 	if err != nil {
 		log.Printf("Error Connect Dbase %v", err)
