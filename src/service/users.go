@@ -3,6 +3,7 @@ package service
 import (
 	"context"
 	"learn-go/src/entities"
+	jwt "learn-go/src/helpers"
 	"learn-go/src/helpers/password"
 	"learn-go/src/repository"
 )
@@ -15,15 +16,14 @@ func NewUserService(repo *repository.UsersRepository) *UserService {
 	return &UserService{repo}
 }
 
-func (s *UserService) Register(ctx context.Context, user *entities.User) error {
-	if user.Name == "" {
-		return ErrUserNameRequired
-	}
-	if user.Password == "" {
-		return ErrUserPasswordRequired
-	}
-
+func (s *UserService) Register(ctx context.Context, user *entities.User) (string, error) {
 	hashedPassword := password.Hash(user.Password)
 	user.Password = hashedPassword
-	return s.repo.RegisterUser(ctx, user)
+
+	userId, err := s.repo.RegisterUser(ctx, user)
+	if err != nil {
+		return "", err
+	}
+	accessToken := jwt.Generate(&jwt.TokenPayload{UserId: userId})
+	return accessToken, nil
 }

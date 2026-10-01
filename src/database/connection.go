@@ -1,8 +1,10 @@
 package database
 
 import (
+	"context"
 	"database/sql"
 	"fmt"
+	"learn-go/src/config"
 	"log"
 	"os"
 
@@ -15,17 +17,27 @@ func Connect() (*sql.DB, error) {
 	if err != nil {
 		log.Printf("Error Read Env")
 	}
+
+	strConnection := fmt.Sprintf("postgres://%v:%v@%v:%v/%v?%v", config.DB_USERNAME, config.DB_PASSWORD, config.DB_HOST, config.DB_PORT, config.DB_NAME, config.DB_PARAMS)
+	// Define connection pool parameters (adjust as needed)
+	maxOpenConns := 20 // Maximum number of open connections in the pool
+	maxIdleConns := 10 // Maximum number of idle connections in the pool
 	dsn := os.Getenv("DATABASE_URL")
 	if dsn == "" {
 		log.Printf("Error Empty string database url")
 		return nil, fmt.Errorf("Error connecting dbase: DATABASE_URL is not set")
 	}
-	db, err := sql.Open("pgx", dsn)
+	db, err := sql.Open("pgx", strConnection)
 	if err != nil {
 		log.Printf("Error Connect Dbase %v", err)
 		return nil, fmt.Errorf("Error Open Database %w", err)
 	}
-	if err := db.Ping(); err != nil {
+
+	// Create connection pool
+	db.SetMaxOpenConns(maxOpenConns)
+	db.SetMaxIdleConns(maxIdleConns)
+	ctx := context.Background()
+	if err := db.PingContext(ctx); err != nil {
 		db.Close()
 		log.Printf("Error Ping %v", err)
 		return nil, fmt.Errorf("Error Open Database %w", err)

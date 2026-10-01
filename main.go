@@ -22,6 +22,7 @@ func main() {
 	productRepo := repository.NewProductRepository(db)
 	productService := service.NewProductService(productRepo)
 	productHandler := handler.NewProductHandler(productService)
+
 	router := gin.Default()
 	router.GET("/", func(c *gin.Context) {
 		c.String(200, "Running Go")
@@ -31,6 +32,11 @@ func main() {
 	router.GET("/products/:id", productHandler.GetProduct)
 	router.GET("/products", productHandler.GetProductAll)
 
+	// register user
+	userRepo := repository.NewUserRepository(db)
+	userService := service.NewUserService(userRepo)
+	userHandler := handler.NewUserHandler(userService)
+	router.POST("/register", userHandler.Register)
 	fmt.Println("Server running at http://localhost:8080")
 
 	if err := router.Run(":8080"); err != nil {
