@@ -7,7 +7,6 @@ import (
 	"learn-go/src/repository"
 	"learn-go/src/service"
 	"log"
-	"net/http"
 
 	"github.com/gin-gonic/gin"
 )
@@ -37,7 +36,7 @@ func main() {
 	productHandler := handler.NewProductHandler(productService)
 	router := gin.Default()
 	router.GET("/", func(c *gin.Context) {
-		c.JSON(http.StatusOK, "Running Go")
+		c.String(200, "Running Go")
 		return
 	})
 	router.POST("/products", productHandler.Create)

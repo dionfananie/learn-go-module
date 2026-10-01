@@ -1,7 +1,6 @@
 package handler
 
 import (
-	"encoding/json"
 	"errors"
 	"learn-go/src/entities"
 	"learn-go/src/service"
@@ -22,7 +21,7 @@ func NewProductHandler(s *service.ProductService) *ProductHandler {
 func (h *ProductHandler) Create(c *gin.Context) {
 	var product entities.Product
 
-	if err := json.NewDecoder(c.Request.Body).Decode(&product); err != nil {
+	if err := c.ShouldBindJSON(&product); err != nil {
 		c.JSON(http.StatusBadRequest, "Invalid JSON")
 		return
 	}
@@ -30,18 +29,17 @@ func (h *ProductHandler) Create(c *gin.Context) {
 	err := h.service.Create(ctx, &product)
 	if err != nil {
 		switch {
-		case errors.Is(err, service.ErrProductNameRequired):
-		case errors.Is(err, service.ErrProductPriceInvalid):
-		case errors.Is(err, service.ErrProductStockInvalid):
+		case errors.Is(err, service.ErrProductNameRequired),
+			errors.Is(err, service.ErrProductPriceInvalid),
+			errors.Is(err, service.ErrProductStockInvalid):
 			c.JSON(http.StatusBadRequest, err.Error())
 		default:
 			c.JSON(http.StatusInternalServerError, "Internal Server Error")
-			return
 		}
+		return
 	}
 
 	c.JSON(http.StatusCreated, product)
-
 }
 
 func (h *ProductHandler) GetProductAll(c *gin.Context) {
@@ -52,7 +50,6 @@ func (h *ProductHandler) GetProductAll(c *gin.Context) {
 		return
 	}
 	c.JSON(http.StatusOK, product)
-
 }
 
 func (h *ProductHandler) GetProduct(c *gin.Context) {
@@ -70,5 +67,4 @@ func (h *ProductHandler) GetProduct(c *gin.Context) {
 		return
 	}
 	c.JSON(http.StatusOK, product)
-
 }
