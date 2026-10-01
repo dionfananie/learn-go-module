@@ -19,18 +19,6 @@ func main() {
 	defer db.Close()
 	fmt.Println("DB Connected!")
 
-	// create table if not exist
-	_, err = db.Exec(`CREATE TABLE IF NOT EXISTS products(
-        id INTEGER GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
-        name TEXT NOT NULL,
-        price INTEGER NOT NULL CHECK (price > 0),
-        stock INTEGER NOT NULL CHECK (stock >= 0)
-    )`)
-
-	if err != nil {
-		log.Fatal(err)
-	}
-
 	productRepo := repository.NewProductRepository(db)
 	productService := service.NewProductService(productRepo)
 	productHandler := handler.NewProductHandler(productService)
