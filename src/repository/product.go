@@ -65,3 +65,32 @@ func (r *ProductRepository) GetProduct(ctx context.Context, id int) (*entities.P
 
 	return &product, nil
 }
+
+func (r *ProductRepository) DeleteProduct(ctx context.Context, id int, userId string) error {
+	query := `
+		WITH target AS (
+			SELECT id, created_by FROM products WHERE id = $1
+		),
+		deleted_product AS(
+			DELETE FROM products WHERE id = $1 AND created_by = $2
+			RETURNING id
+		)
+		SELECT
+			EXISTS(SELECT 1 FROM target_products) AS is_exists,
+			(SELECT created_by FROM target_products) AS is_owner;
+			`
+	var is_exists bool
+	var is_owner bool
+	err := r.db.QueryRowContext(ctx, query, id, userId).Scan(&is_exists, &is_owner)
+	if err != nil {
+		return nil
+	}
+	if !is_exists {
+		return ErrProductNotFound
+	}
+	if !is_owner {
+		return ErrProductNotAuthorized
+	}
+
+	return nil
+}

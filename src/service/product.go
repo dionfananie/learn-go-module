@@ -51,3 +51,7 @@ func (s *ProductService) GetProduct(ctx context.Context, id int) (*entities.Prod
 	}
 	return product, nil
 }
+
+func (s *ProductService) DeleteProduct(ctx context.Context, id int, userId string) error {
+	return s.repo.DeleteProduct(ctx, id, userId)
+}

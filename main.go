@@ -44,6 +44,8 @@ func main() {
 	protected.Use(middleware.AuthMiddleware())
 
 	protected.POST("/products", productHandler.Create)
+	protected.DELETE("/product/:id", productHandler.DeleteProduct)
+
 	fmt.Println("Server running at http://localhost:8080")
 
 	if err := router.Run(":8080"); err != nil {

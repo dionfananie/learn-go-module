@@ -15,6 +15,6 @@ echo "Truncate products & users di DB '${DB_NAME}' (container learn-go-postgres)
 docker exec learn-go-postgres psql -v ON_ERROR_STOP=1 -U "$DB_USER" -d "$DB_NAME" -c \
   "TRUNCATE TABLE products, users RESTART IDENTITY CASCADE;"
 
-echo "DB bersih. Contoh lanjutan:"
+echo "Successfully clean DB. You can continue develop"
 echo "  k6 run loadtest/product-flow.js          # load test"
 echo "  go run db/seed.go                        # isi ulang 250 produk dummy (opsional)"
