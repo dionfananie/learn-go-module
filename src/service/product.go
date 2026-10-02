@@ -16,7 +16,7 @@ func NewProductService(repo *repository.ProductRepository) *ProductService {
 	return &ProductService{repo}
 }
 
-func (s *ProductService) Create(ctx context.Context, product *entities.Product) error {
+func (s *ProductService) Create(ctx context.Context, product *entities.Product, userId string) error {
 	if product.Name == "" {
 		return ErrProductNameRequired
 	}
@@ -28,7 +28,7 @@ func (s *ProductService) Create(ctx context.Context, product *entities.Product) 
 	if product.Stock < 0 {
 		return ErrProductStockInvalid
 	}
-	return s.repo.Create(ctx, product)
+	return s.repo.Create(ctx, product, userId)
 }
 
 func (s *ProductService) GetProductAll(ctx context.Context) ([]entities.Product, error) {

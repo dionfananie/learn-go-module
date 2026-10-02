@@ -38,7 +38,8 @@ func (h *ProductHandler) Create(c *gin.Context) {
 		return
 	}
 	ctx := c.Request.Context()
-	err := h.service.Create(ctx, &product)
+	userId := c.GetString("userId")
+	err := h.service.Create(ctx, &product, userId)
 	if err != nil {
 		fmt.Printf("[Error]- Create Product %v\n", err.Error())
 		switch {

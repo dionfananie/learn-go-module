@@ -14,9 +14,9 @@ func NewProductRepository(db *sql.DB) *ProductRepository {
 	return &ProductRepository{db: db}
 
 }
-func (r *ProductRepository) Create(ctx context.Context, product *entities.Product) error {
+func (r *ProductRepository) Create(ctx context.Context, product *entities.Product, userId string) error {
 	err := r.db.QueryRowContext(ctx,
-		"INSERT INTO products (name, price, stock) VALUES ($1, $2, $3) RETURNING id", product.Name, product.Price, product.Stock,
+		"INSERT INTO products (name, price, stock, created_by) VALUES ($1, $2, $3, $4) RETURNING id", product.Name, product.Price, product.Stock, userId,
 	).Scan(&product.ID)
 
 	return err
@@ -73,17 +73,16 @@ func (r *ProductRepository) DeleteProduct(ctx context.Context, id int, userId st
 		),
 		deleted_product AS(
 			DELETE FROM products WHERE id = $1 AND created_by = $2
-			RETURNING id
 		)
 		SELECT
-			EXISTS(SELECT 1 FROM target_products) AS is_exists,
-			(SELECT created_by FROM target_products) AS is_owner;
+			EXISTS(SELECT 1 FROM target) AS is_exists,
+			(SELECT created_by FROM target) AS is_owner;
 			`
 	var is_exists bool
 	var is_owner bool
 	err := r.db.QueryRowContext(ctx, query, id, userId).Scan(&is_exists, &is_owner)
 	if err != nil {
-		return nil
+		return err
 	}
 	if !is_exists {
 		return ErrProductNotFound
