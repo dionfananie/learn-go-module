@@ -114,7 +114,7 @@ func (h *ProductHandler) DeleteProduct(c *gin.Context) {
 			c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
 
 		case errors.Is(err, service.ErrProductNotAuthorized):
-			c.JSON(http.StatusUnauthorized, gin.H{"error": err.Error()})
+			c.JSON(http.StatusForbidden, gin.H{"error": err.Error()})
 
 		case errors.Is(err, context.DeadlineExceeded):
 			c.JSON(http.StatusGatewayTimeout, gin.H{"error": "Database operation timed out"})

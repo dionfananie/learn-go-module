@@ -44,7 +44,7 @@ func main() {
 	protected.Use(middleware.AuthMiddleware())
 
 	protected.POST("/products", productHandler.Create)
-	protected.DELETE("/product/:id", productHandler.DeleteProduct)
+	protected.DELETE("/products/:id", productHandler.DeleteProduct)
 
 	fmt.Println("Server running at http://localhost:8080")
 
