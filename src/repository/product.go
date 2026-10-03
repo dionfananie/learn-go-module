@@ -76,7 +76,7 @@ func (r *ProductRepository) DeleteProduct(ctx context.Context, id int, userId st
 		)
 		SELECT
 			EXISTS(SELECT 1 FROM target) AS is_exists,
-			EXISTS(SELECT 1 from deleted_product) AS has_deleted,
+			EXISTS(SELECT 1 from deleted_product) AS has_deleted
 			`
 	var is_exists bool
 	var has_deleted bool
