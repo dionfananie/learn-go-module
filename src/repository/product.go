@@ -72,22 +72,22 @@ func (r *ProductRepository) DeleteProduct(ctx context.Context, id int, userId st
 			SELECT id, created_by FROM products WHERE id = $1
 		),
 		deleted_product AS(
-			DELETE FROM products WHERE id = $1 AND created_by = $2
+			DELETE FROM products WHERE id = $1 AND created_by = $2 RETURNING id
 		)
 		SELECT
 			EXISTS(SELECT 1 FROM target) AS is_exists,
-			(SELECT created_by FROM target) AS is_owner;
+			EXISTS(SELECT 1 from deleted_product) AS has_deleted,
 			`
 	var is_exists bool
-	var is_owner bool
-	err := r.db.QueryRowContext(ctx, query, id, userId).Scan(&is_exists, &is_owner)
+	var has_deleted bool
+	err := r.db.QueryRowContext(ctx, query, id, userId).Scan(&is_exists, &has_deleted)
 	if err != nil {
 		return err
 	}
 	if !is_exists {
 		return ErrProductNotFound
 	}
-	if !is_owner {
+	if !has_deleted {
 		return ErrProductNotAuthorized
 	}
 
