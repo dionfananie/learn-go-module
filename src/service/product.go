@@ -75,14 +75,14 @@ func (s *ProductService) Transaction(ctx context.Context, productId int, delta i
 		return nil, err
 	}
 	defer tx.Rollback()
-	err = s.repo.UpdateProduct(ctx, tx, productId, delta, userId, action)
+	oldStock, newStock, err := s.repo.UpdateProduct(ctx, tx, productId, delta, userId, action)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return nil, ErrInsufficientStock // WHERE gagal = stok kurang / produk tak ada
 		}
 		return nil, err
 	}
-	auditID, err := s.auditRepo.Create(ctx, tx, productId, userId, action)
+	auditID, err := s.auditRepo.Create(ctx, tx, productId, userId, action, oldStock, newStock)
 	if err != nil {
 		return nil, err
 	}

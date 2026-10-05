@@ -131,6 +131,7 @@ func (h *ProductHandler) DeleteProduct(c *gin.Context) {
 func (h *ProductHandler) Transaction(c *gin.Context) {
 	id, err := strconv.Atoi(c.Param("id"))
 	if err != nil {
+
 		fmt.Printf("[Error]- Transaction Product  %v\n", err.Error())
 		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid product id"})
 		return
@@ -145,14 +146,17 @@ func (h *ProductHandler) Transaction(c *gin.Context) {
 	defer cancel()
 	c.Request = c.Request.WithContext(ctx)
 	userId := c.GetString("userId")
-	auditId, err := h.service.Transaction(c.Request.Context(), id, req.Delta, userId, "create")
+	result, err := h.service.Transaction(c.Request.Context(), id, req.Delta, userId, "create")
 	if err != nil {
 		fmt.Printf("[Error]- Transaction Product Create %v\n", err.Error())
-
+		if errors.Is(err, service.ErrInsufficientStock) {
+			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+			return
+		}
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Internal Server Error"})
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{"message": "Transaction success", "data": gin.H{"audit_id": auditId}})
+	c.JSON(http.StatusOK, gin.H{"message": "Transaction success", "data": gin.H{"audit_id": result.AuditID}})
 
 }

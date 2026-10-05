@@ -12,10 +12,11 @@ type AuditRepository struct {
 func NewAuditRepository(db *sql.DB) *AuditRepository {
 	return &AuditRepository{db}
 }
-
-func (r *AuditRepository) Create(ctx context.Context, tx *sql.Tx, productId int, userId string, action string) (int64, error) {
+func (r *AuditRepository) Create(ctx context.Context, tx *sql.Tx, productId int, userId string, action string, oldStock int, newStock int) (int64, error) {
 	var auditID int64
-	err := tx.QueryRowContext(ctx, "INSERT INTO products_audit_logs (product_id, user_id, action) VALUES($1, $2, $3) RETURNING id", productId, userId, action).Scan(&auditID)
+	err := tx.QueryRowContext(ctx,
+		"INSERT INTO products_audit_logs (product_id, user_id, action, old_stock, new_stock) VALUES($1, $2, $3, $4, $5) RETURNING id",
+		productId, userId, action, oldStock, newStock).Scan(&auditID)
 	if err != nil {
 		return 0, err
 	}
