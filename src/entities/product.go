@@ -8,5 +8,5 @@ type Product struct {
 }
 
 type AdjustStockRequest struct {
-	Delta int32 `json:"delta" binding:"required"` // != 0; positif = kurangi stok, negatif = tambah
+	Delta int32 `json:"delta" binding:"required,ne=0"` // != 0; positif = kurangi stok, negatif = tambah
 }
