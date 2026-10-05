@@ -127,3 +127,32 @@ func (h *ProductHandler) DeleteProduct(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"message": "Product successfully deleted", "data": id})
 
 }
+
+func (h *ProductHandler) Transaction(c *gin.Context) {
+	id, err := strconv.Atoi(c.Param("id"))
+	if err != nil {
+		fmt.Printf("[Error]- Transaction Product  %v\n", err.Error())
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid product id"})
+		return
+	}
+	var req entities.AdjustStockRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid request body"})
+		return
+	}
+
+	ctx, cancel := context.WithTimeout(c.Request.Context(), 5*time.Second)
+	defer cancel()
+	c.Request = c.Request.WithContext(ctx)
+	userId := c.GetString("userId")
+	auditId, err := h.service.Transaction(c.Request.Context(), id, req.Delta, userId, "create")
+	if err != nil {
+		fmt.Printf("[Error]- Transaction Product Create %v\n", err.Error())
+
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Internal Server Error"})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"message": "Transaction success", "data": gin.H{"audit_id": auditId}})
+
+}

@@ -34,7 +34,8 @@ func main() {
 	router.POST("/login", userHandler.Login)
 
 	productRepo := repository.NewProductRepository(db)
-	productService := service.NewProductService(productRepo)
+	auditRepo := repository.NewAuditRepository(db)
+	productService := service.NewProductService(productRepo, auditRepo)
 	productHandler := handler.NewProductHandler(productService)
 
 	router.GET("/products/:id", productHandler.GetProduct)
@@ -45,6 +46,7 @@ func main() {
 
 	protected.POST("/products", productHandler.Create)
 	protected.DELETE("/products/:id", productHandler.DeleteProduct)
+	protected.PATCH("/products/:id/update-stock", productHandler.Transaction)
 
 	fmt.Println("Server running at http://localhost:8080")
 

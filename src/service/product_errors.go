@@ -8,4 +8,5 @@ var (
 	ErrProductNameRequired  = errors.New("product name is required")
 	ErrProductPriceInvalid  = errors.New("product price must be greater than 0")
 	ErrProductStockInvalid  = errors.New("product stock cannot be negative")
+	ErrInsufficientStock    = errors.New("product stock insufficient")
 )

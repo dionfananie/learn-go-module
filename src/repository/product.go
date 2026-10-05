@@ -93,3 +93,22 @@ func (r *ProductRepository) DeleteProduct(ctx context.Context, id int, userId st
 
 	return nil
 }
+
+func (r *ProductRepository) BeginTx(ctx context.Context) (*sql.Tx, error) {
+	return r.db.BeginTx(ctx, nil)
+}
+func (r *ProductRepository) UpdateProduct(ctx context.Context, tx *sql.Tx, productId int, delta int32, userId string, action string) error {
+	var old_stock int
+	var new_stock int
+	err := tx.QueryRowContext(ctx,
+		`UPDATE products
+		SET stock = stock - $1
+		WHERE id = $2 AND stock >= $1
+		RETURNING stock + $1 AS old_stock, stock AS new_stock`, 1, productId).Scan(&old_stock, &new_stock)
+
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
