@@ -69,16 +69,27 @@ type AdjustStockResult struct {
 	AuditID int64
 }
 
-func (s *ProductService) Transaction(ctx context.Context, productId int, delta int32, userId string, action string) (*AdjustStockResult, error) {
+func (s *ProductService) Transaction(ctx context.Context, productId int, delta int32, userId string) (*AdjustStockResult, error) {
 	tx, err := s.repo.BeginTx(ctx)
 	if err != nil {
 		return nil, err
 	}
 	defer tx.Rollback()
-	oldStock, newStock, err := s.repo.UpdateProduct(ctx, tx, productId, delta, userId, action)
+
+	var action string
+	if delta >= 0 {
+		action = "subtract" // delta positif = stok berkurang
+	} else {
+		action = "add" // delta negatif = stok bertambah (restock)
+	}
+
+	oldStock, newStock, err := s.repo.UpdateProduct(ctx, tx, productId, delta)
 	if err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
-			return nil, ErrInsufficientStock // WHERE gagal = stok kurang / produk tak ada
+		switch {
+		case errors.Is(err, repository.ErrProductNotFound):
+			return nil, ErrProductNotFound // 404
+		case errors.Is(err, repository.ErrInsufficientStock):
+			return nil, ErrInsufficientStock // 400
 		}
 		return nil, err
 	}

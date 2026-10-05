@@ -97,15 +97,36 @@ func (r *ProductRepository) DeleteProduct(ctx context.Context, id int, userId st
 func (r *ProductRepository) BeginTx(ctx context.Context) (*sql.Tx, error) {
 	return r.db.BeginTx(ctx, nil)
 }
-func (r *ProductRepository) UpdateProduct(ctx context.Context, tx *sql.Tx, productId int, delta int32, userId string, action string) (int, int, error) {
-	var oldStock, newStock int
-	err := tx.QueryRowContext(ctx,
-		`UPDATE products
-		SET stock = stock - $1
-		WHERE id = $2 AND stock >= $1
-		RETURNING stock + $1 AS old_stock, stock AS new_stock`, delta, productId).Scan(&oldStock, &newStock)
+func (r *ProductRepository) UpdateProduct(ctx context.Context, tx *sql.Tx, productId int, delta int32) (int, int, error) {
+	var (
+		productExists bool
+		oldStock      sql.NullInt64
+		newStock      sql.NullInt64
+	)
+	err := tx.QueryRowContext(ctx, `
+		WITH target AS (
+			SELECT id FROM products WHERE id = $2
+		),
+		updated AS (
+			UPDATE products
+			SET stock = stock - $1
+			WHERE id = $2 AND stock >= $1
+			RETURNING stock + $1 AS old_stock, stock AS new_stock
+		)
+		SELECT
+			EXISTS(SELECT 1 FROM target) AS product_exists,
+			(SELECT old_stock FROM updated) AS old_stock,
+			(SELECT new_stock FROM updated) AS new_stock`,
+		delta, productId).Scan(&productExists, &oldStock, &newStock)
 	if err != nil {
 		return 0, 0, err
 	}
-	return oldStock, newStock, nil
+
+	if !productExists {
+		return 0, 0, ErrProductNotFound // produknya memang tidak ada -> 404
+	}
+	if !oldStock.Valid || !newStock.Valid {
+		return 0, 0, ErrInsufficientStock // produk ada, tapi stok tidak cukup -> 400
+	}
+	return int(oldStock.Int64), int(newStock.Int64), nil
 }

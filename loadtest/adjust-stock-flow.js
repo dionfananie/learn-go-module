@@ -150,7 +150,7 @@ export default function (data) {
     adjustInsufficientDuration.add(insRes.timings.duration);
     ok =
       check(insRes, {
-        'adjust beyond stock is rejected': (r) => r.status === 400 || r.status === 404 || r.status === 500,
+        'adjust beyond stock is 400 (insufficient)': (r) => r.status === 400,
       }) && ok;
 
     // pastikan stok TIDAK berubah setelah penolakan (transaksi rollback)
@@ -167,12 +167,12 @@ export default function (data) {
       }) && ok;
   }
 
-  // Skenario 4: adjust produk yang tidak ada -> ditolak
+  // Skenario 4: adjust produk yang tidak ada -> 404 (beda dari stok kurang -> 400)
   const missRes = http.patch(`${BASE_URL}/products/999999999/update-stock`, JSON.stringify({ delta: 1 }), auth);
   adjustMissingDuration.add(missRes.timings.duration);
   ok =
     check(missRes, {
-      'adjust missing product is rejected': (r) => r.status === 404 || r.status === 400 || r.status === 500,
+      'adjust missing product is 404': (r) => r.status === 404,
     }) && ok;
 
   flowFailureRate.add(!ok);

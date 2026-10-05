@@ -146,14 +146,17 @@ func (h *ProductHandler) Transaction(c *gin.Context) {
 	defer cancel()
 	c.Request = c.Request.WithContext(ctx)
 	userId := c.GetString("userId")
-	result, err := h.service.Transaction(c.Request.Context(), id, req.Delta, userId, "create")
+	result, err := h.service.Transaction(c.Request.Context(), id, req.Delta, userId)
 	if err != nil {
 		fmt.Printf("[Error]- Transaction Product Create %v\n", err.Error())
-		if errors.Is(err, service.ErrInsufficientStock) {
+		switch {
+		case errors.Is(err, service.ErrProductNotFound):
+			c.JSON(http.StatusNotFound, gin.H{"error": "Product not found"})
+		case errors.Is(err, service.ErrInsufficientStock):
 			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
-			return
+		default:
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "Internal Server Error"})
 		}
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Internal Server Error"})
 		return
 	}
 
