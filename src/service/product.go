@@ -53,6 +53,14 @@ func (s *ProductService) GetProduct(ctx context.Context, id int) (*entities.Prod
 	return product, nil
 }
 
+func (s *ProductService) GetProductAuditLogs(ctx context.Context, productId int) ([]entities.AuditLog, error) {
+	logs, err := s.auditRepo.GetByProductID(ctx, productId)
+	if err != nil {
+		return nil, err
+	}
+	return logs, nil
+}
+
 func (s *ProductService) DeleteProduct(ctx context.Context, id int, userId string) error {
 	err := s.repo.DeleteProduct(ctx, id, userId)
 	switch {

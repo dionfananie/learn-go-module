@@ -3,6 +3,7 @@ package repository
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"learn-go/src/entities"
 )
 
@@ -98,35 +99,38 @@ func (r *ProductRepository) BeginTx(ctx context.Context) (*sql.Tx, error) {
 	return r.db.BeginTx(ctx, nil)
 }
 func (r *ProductRepository) UpdateProduct(ctx context.Context, tx *sql.Tx, productId int, delta int32) (int, int, error) {
-	var (
-		productExists bool
-		oldStock      sql.NullInt64
-		newStock      sql.NullInt64
+	var stock int32
+
+	// 1) Kunci row + baca stok terkini.
+	//    FOR UPDATE menahan lock sampai tx di-COMMIT/ROLLBACK, sehingga tidak
+	//    ada transaksi lain yang bisa mengubah stok di antara langkah baca
+	//    (di sini) dan langkah update (di bawah).
+	err := tx.QueryRowContext(ctx,
+		"SELECT stock FROM products WHERE id = $1 FOR UPDATE",
+		productId,
+	).Scan(&stock)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return 0, 0, ErrProductNotFound // produk tidak ada -> 404
+		}
+		return 0, 0, err
+	}
+
+	// 2) Keputusan bisnis dilakukan di Go — aman karena row terkunci.
+	//    delta positif = kurangi stok; delta negatif = tambah (restock).
+	if stock < delta {
+		return 0, 0, ErrInsufficientStock // stok tidak cukup -> 400
+	}
+
+	// 3) Tulis nilai yang sudah dicek. Lock masih dipegang sampai Commit.
+	newStock := stock - delta
+	_, err = tx.ExecContext(ctx,
+		"UPDATE products SET stock = $1 WHERE id = $2",
+		newStock, productId,
 	)
-	err := tx.QueryRowContext(ctx, `
-		WITH target AS (
-			SELECT id FROM products WHERE id = $2
-		),
-		updated AS (
-			UPDATE products
-			SET stock = stock - $1
-			WHERE id = $2 AND stock >= $1
-			RETURNING stock + $1 AS old_stock, stock AS new_stock
-		)
-		SELECT
-			EXISTS(SELECT 1 FROM target) AS product_exists,
-			(SELECT old_stock FROM updated) AS old_stock,
-			(SELECT new_stock FROM updated) AS new_stock`,
-		delta, productId).Scan(&productExists, &oldStock, &newStock)
 	if err != nil {
 		return 0, 0, err
 	}
 
-	if !productExists {
-		return 0, 0, ErrProductNotFound // produknya memang tidak ada -> 404
-	}
-	if !oldStock.Valid || !newStock.Valid {
-		return 0, 0, ErrInsufficientStock // produk ada, tapi stok tidak cukup -> 400
-	}
-	return int(oldStock.Int64), int(newStock.Int64), nil
+	return int(stock), int(newStock), nil
 }

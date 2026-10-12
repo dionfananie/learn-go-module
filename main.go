@@ -40,6 +40,7 @@ func main() {
 
 	router.GET("/products/:id", productHandler.GetProduct)
 	router.GET("/products", productHandler.GetProductAll)
+	router.GET("/products/:id/audit-logs", productHandler.GetAuditLogs)
 
 	protected := router.Group("/")
 	protected.Use(middleware.AuthMiddleware())

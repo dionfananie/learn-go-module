@@ -21,6 +21,7 @@ Current migrations:
 | 000002  | `create_products`     | Creates the `products` table                     |
 | 000003  | `create_products_audit_logs` | Creates the `products_audit_logs` table   |
 | 000004  | `add_users_name_index`| Adds `idx_users_name` for the login lookup query |
+| 000005  | `add_audit_logs_composite_index` | Adds composite index `(product_id, created_at)` for audit history queries |
 
 ## Prerequisites
 
