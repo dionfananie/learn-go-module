@@ -34,16 +34,21 @@ func main() {
 	router.POST("/login", userHandler.Login)
 
 	productRepo := repository.NewProductRepository(db)
-	productService := service.NewProductService(productRepo)
+	auditRepo := repository.NewAuditRepository(db)
+	productService := service.NewProductService(productRepo, auditRepo)
 	productHandler := handler.NewProductHandler(productService)
 
 	router.GET("/products/:id", productHandler.GetProduct)
 	router.GET("/products", productHandler.GetProductAll)
+	router.GET("/products/:id/audit-logs", productHandler.GetAuditLogs)
 
 	protected := router.Group("/")
 	protected.Use(middleware.AuthMiddleware())
 
 	protected.POST("/products", productHandler.Create)
+	protected.DELETE("/products/:id", productHandler.DeleteProduct)
+	protected.PATCH("/products/:id/update-stock", productHandler.Transaction)
+
 	fmt.Println("Server running at http://localhost:8080")
 
 	if err := router.Run(":8080"); err != nil {

@@ -9,14 +9,15 @@ import (
 )
 
 type ProductService struct {
-	repo *repository.ProductRepository
+	repo      *repository.ProductRepository
+	auditRepo *repository.AuditRepository
 }
 
-func NewProductService(repo *repository.ProductRepository) *ProductService {
-	return &ProductService{repo}
+func NewProductService(repo *repository.ProductRepository, auditRepo *repository.AuditRepository) *ProductService {
+	return &ProductService{repo, auditRepo}
 }
 
-func (s *ProductService) Create(ctx context.Context, product *entities.Product) error {
+func (s *ProductService) Create(ctx context.Context, product *entities.Product, userId string) error {
 	if product.Name == "" {
 		return ErrProductNameRequired
 	}
@@ -28,7 +29,7 @@ func (s *ProductService) Create(ctx context.Context, product *entities.Product) 
 	if product.Stock < 0 {
 		return ErrProductStockInvalid
 	}
-	return s.repo.Create(ctx, product)
+	return s.repo.Create(ctx, product, userId)
 }
 
 func (s *ProductService) GetProductAll(ctx context.Context) ([]entities.Product, error) {
@@ -50,4 +51,62 @@ func (s *ProductService) GetProduct(ctx context.Context, id int) (*entities.Prod
 		return nil, err
 	}
 	return product, nil
+}
+
+func (s *ProductService) GetProductAuditLogs(ctx context.Context, productId int) ([]entities.AuditLog, error) {
+	logs, err := s.auditRepo.GetByProductID(ctx, productId)
+	if err != nil {
+		return nil, err
+	}
+	return logs, nil
+}
+
+func (s *ProductService) DeleteProduct(ctx context.Context, id int, userId string) error {
+	err := s.repo.DeleteProduct(ctx, id, userId)
+	switch {
+	case errors.Is(err, repository.ErrProductNotFound):
+		return ErrProductNotFound // 404
+	case errors.Is(err, repository.ErrProductNotAuthorized):
+		return ErrProductNotAuthorized // 403
+	}
+	return err
+
+}
+
+type AdjustStockResult struct {
+	AuditID int64
+}
+
+func (s *ProductService) Transaction(ctx context.Context, productId int, delta int32, userId string) (*AdjustStockResult, error) {
+	tx, err := s.repo.BeginTx(ctx)
+	if err != nil {
+		return nil, err
+	}
+	defer tx.Rollback()
+
+	var action string
+	if delta >= 0 {
+		action = "subtract" // delta positif = stok berkurang
+	} else {
+		action = "add" // delta negatif = stok bertambah (restock)
+	}
+
+	oldStock, newStock, err := s.repo.UpdateProduct(ctx, tx, productId, delta)
+	if err != nil {
+		switch {
+		case errors.Is(err, repository.ErrProductNotFound):
+			return nil, ErrProductNotFound // 404
+		case errors.Is(err, repository.ErrInsufficientStock):
+			return nil, ErrInsufficientStock // 400
+		}
+		return nil, err
+	}
+	auditID, err := s.auditRepo.Create(ctx, tx, productId, userId, action, oldStock, newStock)
+	if err != nil {
+		return nil, err
+	}
+	if err := tx.Commit(); err != nil {
+		return nil, err
+	}
+	return &AdjustStockResult{AuditID: auditID}, nil
 }

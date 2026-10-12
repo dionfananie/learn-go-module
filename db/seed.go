@@ -2,16 +2,27 @@ package main
 
 import (
 	"context"
+	"database/sql"
+	"errors"
 	"fmt"
 	"log"
 	"math/rand"
 
 	database "learn-go/src/database"
 	"learn-go/src/entities"
+	"learn-go/src/helpers/password"
 	"learn-go/src/repository"
 )
 
 const seedCount = 250
+
+// Semua produk hasil seed dimiliki user ini supaya kolom created_by (FK users.id)
+// terisi, sehingga produk seed bisa ikut di-delete/diuji lewat API.
+const (
+	seedUserName     = "seed_user"
+	seedUserPhone    = "080000000001"
+	seedUserPassword = "SeedUser12345" // boleh dipakai login utk cek manual
+)
 
 var (
 	productNames = []string{
@@ -39,6 +50,34 @@ func randomProduct(r *rand.Rand) entities.Product {
 	}
 }
 
+// ensureSeedUser mengembalikan id user pemilik produk seed.
+// Kalau belum ada, dibuat dulu — aman dipanggil berulang kali (idempotent).
+func ensureSeedUser(ctx context.Context, db *sql.DB, userRepo *repository.UsersRepository) (string, error) {
+	var id string
+	err := db.QueryRowContext(ctx, "SELECT id FROM users WHERE name = $1", seedUserName).Scan(&id)
+	if err == nil {
+		return id, nil // sudah ada, pakai ulang
+	}
+	if !errors.Is(err, sql.ErrNoRows) {
+		return "", err
+	}
+
+	hashed, err := password.Hash(seedUserPassword)
+	if err != nil {
+		return "", err
+	}
+	resp, err := userRepo.RegisterUser(ctx, &entities.User{
+		Name:        seedUserName,
+		PhoneNumber: seedUserPhone,
+		Password:    hashed,
+	})
+	if err != nil {
+		return "", err
+	}
+	log.Printf("seed user dibuat: %s", seedUserName)
+	return resp.ID, nil
+}
+
 func main() {
 	db, err := database.Connect()
 	if err != nil {
@@ -47,14 +86,20 @@ func main() {
 	defer db.Close()
 
 	repo := repository.NewProductRepository(db)
+	userRepo := repository.NewUserRepository(db)
 	ctx := context.Background()
 	r := rand.New(rand.NewSource(250)) // seed tetap, biar hasil reproducible
+
+	ownerID, err := ensureSeedUser(ctx, db, userRepo)
+	if err != nil {
+		log.Fatalf("gagal menyiapkan seed user: %v", err)
+	}
 
 	var success, failed int
 
 	for i := 0; i < seedCount; i++ {
 		product := randomProduct(r)
-		if err := repo.Create(ctx, &product); err != nil {
+		if err := repo.Create(ctx, &product, ownerID); err != nil {
 			log.Printf("gagal seed produk #%d (%s): %v", i+1, product.Name, err)
 			failed++
 			continue
@@ -62,5 +107,5 @@ func main() {
 		success++
 	}
 
-	fmt.Printf("Seeding selesai. Berhasil: %d, Gagal: %d\n", success, failed)
+	fmt.Printf("Seeding selesai. Berhasil: %d, Gagal: %d (pemilik: %s)\n", success, failed, seedUserName)
 }

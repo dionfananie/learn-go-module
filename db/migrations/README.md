@@ -15,10 +15,13 @@ Naming convention: `<6-digit-sequence>_<name>.up.sql` / `<6-digit-sequence>_<nam
 
 Current migrations:
 
-| Version | Name             | Description                  |
-|---------|------------------|------------------------------|
-| 000001  | `create_users`   | Creates the `users` table    |
-| 000002  | `create_products`| Creates the `products` table |
+| Version | Name                  | Description                                      |
+|---------|-----------------------|--------------------------------------------------|
+| 000001  | `create_users`        | Creates the `users` table                        |
+| 000002  | `create_products`     | Creates the `products` table                     |
+| 000003  | `create_products_audit_logs` | Creates the `products_audit_logs` table   |
+| 000004  | `add_users_name_index`| Adds `idx_users_name` for the login lookup query |
+| 000005  | `add_audit_logs_composite_index` | Adds composite index `(product_id, created_at)` for audit history queries |
 
 ## Prerequisites
 
