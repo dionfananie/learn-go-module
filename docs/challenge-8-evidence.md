@@ -52,29 +52,22 @@ LIMIT 20;
 Setelah data audit ditambah hingga total 3.000 rows, hasil pada database:
 
 ```text
-Sort  (cost=48.28..48.30 rows=10 width=45)
-  (actual time=0.058..0.059 rows=10 loops=1)
-  Sort Key: created_at DESC
-  Sort Method: quicksort  Memory: 25kB
-  Buffers: shared hit=4
-  -> Bitmap Heap Scan on products_audit_logs
-       (cost=24.48..48.11 rows=10 width=45)
-       (actual time=0.053..0.054 rows=10 loops=1)
-       Recheck Cond: (product_id = 1)
-       Heap Blocks: exact=1
-       Buffers: shared hit=4
-       -> Bitmap Index Scan on idx_audit_logs_product_created
-            (cost=0.00..24.48 rows=10 width=0)
-            (actual time=0.034..0.035 rows=10 loops=1)
-            Index Cond: (product_id = 1)
-            Buffers: shared hit=3
+Limit  (cost=0.41..59.67 rows=20 width=45)
+  (actual time=0.008..0.014 rows=20 loops=1)
+  Buffers: shared hit=23
+  -> Index Scan Backward using idx_audit_logs_product_created
+       on products_audit_logs
+       (cost=0.41..593.05 rows=200 width=45)
+       (actual time=0.007..0.012 rows=20 loops=1)
+       Index Cond: (product_id = 9980)
+       Buffers: shared hit=23
   Planning:
-    Buffers: shared hit=21
-  Planning Time: 0.075 ms
-  Execution Time: 0.109 ms
+    Buffers: shared hit=45
+  Planning Time: 0.180 ms
+  Execution Time: 0.026 ms
 ```
 
-Interpretasi: setelah tabel berisi 3.000 rows, query yang hanya mengembalikan 10 rows memakai `Bitmap Index Scan` dan `Bitmap Heap Scan`. Index dipakai untuk kondisi `product_id = 1`; `Sort` masih diperlukan karena planner memilih bitmap scan. Pada tabel kecil atau query yang mengembalikan sebagian besar rows, PostgreSQL tetap dapat memilih `Seq Scan`. Index tidak otomatis selalu digunakan.
+Interpretasi: setelah tabel berisi 3.000 rows, query audit untuk `product_id = 9980` menggunakan `Index Scan Backward` pada composite index. Index memenuhi kondisi `product_id` sekaligus menyediakan urutan `created_at DESC`, sehingga tidak ada node `Sort`. `LIMIT 20` membuat PostgreSQL dapat berhenti setelah menemukan 20 rows pertama.
 
 ## 3. Audit batas delta
 
