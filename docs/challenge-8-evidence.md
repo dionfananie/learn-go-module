@@ -192,7 +192,7 @@ Ini membuktikan tiga hal sekaligus: lock berlaku pada row yang dibaca, lock dita
 Test:
 
 ```bash
-./loadtest/run-rollback-audit-error.sh
+./loadtest/concurrent/run-rollback-audit-error.sh
 ```
 
 Test memasang trigger sementara yang sengaja menggagalkan insert audit. Hasil:
