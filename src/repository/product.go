@@ -122,8 +122,15 @@ func (r *ProductRepository) UpdateProduct(ctx context.Context, tx *sql.Tx, produ
 		return 0, 0, ErrInsufficientStock // stok tidak cukup -> 400
 	}
 
-	// 3) Tulis nilai yang sudah dicek. Lock masih dipegang sampai Commit.
-	newStock := stock - delta
+	// 3) Hitung menggunakan int64 terlebih dahulu agar delta negatif ekstrem
+	//    (mis. math.MinInt32) tidak overflow saat restock.
+	newStock64 := int64(stock) - int64(delta)
+	if newStock64 > int64(1<<31-1) {
+		return 0, 0, ErrStockOverflow
+	}
+
+	// Tulis nilai yang sudah dicek. Lock masih dipegang sampai Commit.
+	newStock := int32(newStock64)
 	_, err = tx.ExecContext(ctx,
 		"UPDATE products SET stock = $1 WHERE id = $2",
 		newStock, productId,

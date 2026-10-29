@@ -170,6 +170,8 @@ func (h *ProductHandler) Transaction(c *gin.Context) {
 			c.JSON(http.StatusNotFound, gin.H{"error": "Product not found"})
 		case errors.Is(err, service.ErrInsufficientStock):
 			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		case errors.Is(err, service.ErrStockOverflow):
+			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		default:
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "Internal Server Error"})
 		}

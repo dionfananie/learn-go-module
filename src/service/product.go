@@ -98,6 +98,8 @@ func (s *ProductService) Transaction(ctx context.Context, productId int, delta i
 			return nil, ErrProductNotFound // 404
 		case errors.Is(err, repository.ErrInsufficientStock):
 			return nil, ErrInsufficientStock // 400
+		case errors.Is(err, repository.ErrStockOverflow):
+			return nil, ErrStockOverflow // 400
 		}
 		return nil, err
 	}
