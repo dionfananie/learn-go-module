@@ -102,6 +102,31 @@ PASS
 ok  	learn-go/src/repository	0.047s
 ```
 
+Test yang sama juga dijalankan dengan race detector:
+
+```bash
+CGO_ENABLED=1 \
+TEST_DATABASE_URL='postgres://postgres:postgres@localhost:5000/learn_go?sslmode=disable' \
+go test -race -tags integration ./src/repository/ \
+  -run TestUpdateProductDeltaBoundaries -v
+```
+
+Hasil:
+
+```text
+--- PASS: TestUpdateProductDeltaBoundaries (0.12s)
+    --- PASS: MaxInt32_melebihi_stok (0.05s)
+    --- PASS: delta_lebih_besar_dari_stok (0.01s)
+    --- PASS: delta_tepat_sama_dengan_stok_(stok_jadi_nol) (0.01s)
+    --- PASS: delta_pada_stok_nol (0.01s)
+    --- PASS: MinInt32_menyebabkan_overflow_int32 (0.01s)
+    --- PASS: delta_negatif_melakukan_restock (0.01s)
+PASS
+ok  	learn-go/src/repository	1.131s
+```
+
+Tidak ada laporan `DATA RACE`. Kenaikan waktu (0.047s → 1.131s) berasal dari overhead instrumentasi race detector, bukan masalah pada kode.
+
 | Kasus | Stok awal | Delta | Hasil |
 |---|---|---|---|
 | MaxInt32 melebihi stok | 10 | 2147483647 | `ErrInsufficientStock` |
