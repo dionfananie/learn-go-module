@@ -80,41 +80,87 @@ if newStock64 > int64(1<<31-1) {
 }
 ```
 
-Bukti pengujian repository:
+Test otomatis tersedia di `src/repository/product_delta_integration_test.go` (build tag `integration`):
+
+```bash
+TEST_DATABASE_URL='postgres://postgres:postgres@localhost:5000/learn_go?sslmode=disable' \
+  go test -tags integration ./src/repository/ \
+  -run TestUpdateProductDeltaBoundaries -v
+```
+
+Hasil:
 
 ```text
-delta=-2147483648: overflow=true error=resulting stock exceeds int32 limit
-delta=1 with stock=0: insufficient=true error=product stock insufficient
+--- PASS: TestUpdateProductDeltaBoundaries
+    --- PASS: MaxInt32_melebihi_stok
+    --- PASS: delta_lebih_besar_dari_stok
+    --- PASS: delta_tepat_sama_dengan_stok_(stok_jadi_nol)
+    --- PASS: delta_pada_stok_nol
+    --- PASS: MinInt32_menyebabkan_overflow_int32
+    --- PASS: delta_negatif_melakukan_restock
+PASS
+ok  	learn-go/src/repository	0.047s
 ```
+
+| Kasus | Stok awal | Delta | Hasil |
+|---|---|---|---|
+| MaxInt32 melebihi stok | 10 | 2147483647 | `ErrInsufficientStock` |
+| delta lebih besar dari stok | 10 | 11 | `ErrInsufficientStock` |
+| delta tepat sama dengan stok | 10 | 10 | sukses, stok 10 → 0 |
+| delta pada stok nol | 0 | 1 | `ErrInsufficientStock` |
+| MinInt32 menyebabkan overflow | 0 | -2147483648 | `ErrStockOverflow` |
+| delta negatif melakukan restock | 0 | -5 | sukses, stok 0 → 5 |
 
 Dengan demikian:
 
 - delta positif lebih besar dari stok menghasilkan `ErrInsufficientStock`;
 - delta negatif yang menyebabkan hasil lebih besar dari `MaxInt32` menghasilkan `ErrStockOverflow`;
 - stok tidak boleh menjadi negatif;
-- hasil stok tidak dapat overflow int32.
+- hasil stok tidak dapat overflow int32;
+- `delta = 0` ditolak di layer binding (`ne=0`) sebelum mencapai repository.
 
 ## 4. Verifikasi SELECT FOR UPDATE
+
+Pengujian ini memakai dua transaksi yang benar-benar mengubah stok row yang sama, bukan hanya mengamati lock. Produk uji dibuat dengan stok awal 100.
 
 Sesi A menjalankan:
 
 ```sql
 BEGIN;
-SELECT id, stock FROM products WHERE id = 9980 FOR UPDATE;
-SELECT pg_sleep(4);
+SELECT stock FROM products WHERE id = <test-id> FOR UPDATE;
+SELECT pg_sleep(3);
+UPDATE products SET stock = stock - 10 WHERE id = <test-id>;
 COMMIT;
 ```
 
-Sesi B menjalankan query `SELECT ... FOR UPDATE` pada row yang sama sebelum Sesi A commit. Saat Sesi A masih tidur, PostgreSQL menunjukkan:
+Sesi B menjalankan, sekitar 1 detik kemudian:
 
-```text
-pid | wait_event_type | state  | query
-----+-----------------+--------+----------------------------------------------
-359 | Lock            | active | BEGIN; SELECT id, stock FROM products
-    |                 |        | WHERE id=9980 FOR UPDATE; COMMIT;
+```sql
+BEGIN;
+SELECT clock_timestamp() AS session_b_acquired_at, stock
+FROM products WHERE id = <test-id> FOR UPDATE;
+UPDATE products SET stock = stock - 10 WHERE id = <test-id>;
+COMMIT;
 ```
 
-Sesi B baru memperoleh row setelah Sesi A melakukan `COMMIT`. Ini membuktikan lock berlaku pada row yang dibaca dan ditahan sampai transaksi selesai.
+Saat Sesi A masih memegang lock, PostgreSQL menunjukkan Sesi B menunggu:
+
+```text
+ pid | wait_event_type | query
+-----+-----------------+--------------------------------------------------------
+ 649 | Lock            | BEGIN; SELECT clock_timestamp() AS session_b_acquired_at...
+```
+
+Hasil yang tercatat:
+
+```text
+Sesi A membaca stok : 100
+Sesi B menunggu     : wait_event_type = Lock
+Sesi B baru membaca : 90   (bukan 100 — membaca hasil commit Sesi A)
+Stok akhir          : 80   (100 - 10 - 10)
+```
+
+Ini membuktikan tiga hal sekaligus: lock berlaku pada row yang dibaca, lock ditahan sampai transaksi berakhir, dan transaksi kedua membaca hasil transaksi pertama (tidak ada lost update).
 
 ## 5. Test rollback
 
