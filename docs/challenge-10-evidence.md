@@ -12,7 +12,7 @@ Tanggal pengujian: 2026-10-31
 | Transaksi dibatalkan PostgreSQL | `pg_stat_database.deadlocks` | **+276** selama run |
 | Request gagal tak terduga | `http_req_failed` | **0.00%** |
 | Iterasi selesai | k6 | **300/300**, 0 dropped |
-| **Setelah fix (urutan lock konsisten)** | k6, beban sama | **0 deadlock**, **300/300 sukses**, avg **70 ms** |
+| **Setelah fix (urutan lock konsisten)** | k6, beban sama | **0 deadlock**, **300/300 sukses**, avg **31 ms** |
 | **Regression test fix** | `go test -tags integration` | **PASS**, `deadlock=0` |
 
 ---
@@ -263,16 +263,24 @@ Dua transfer berlawanan arah jadi mengunci dengan urutan terbalik → circular w
 
 ### Perbaikan
 
-Kedua baris dikunci dengan **urutan deterministik berdasarkan id** (id terkecil
-dulu), apa pun arah transfernya:
+Kedua baris dikunci dalam **satu query** dengan `ORDER BY id`, sehingga lock
+selalu diambil dari id terkecil ke terbesar, apa pun arah transfernya:
 
 ```go
-// SESUDAH: id terkecil selalu dikunci lebih dulu
-firstId, secondId := fromId, toId
-if firstId > secondId {
-    firstId, secondId = secondId, firstId
-}
-// lock firstId, lalu lock secondId  (SELECT ... FOR UPDATE)
+// SESUDAH: satu query, lock mengikuti urutan id
+rows, err := tx.QueryContext(ctx,
+    "SELECT id, stock FROM products WHERE id IN ($1, $2) ORDER BY id FOR UPDATE",
+    fromId, toId,
+)
+```
+
+Plan PostgreSQL menaruh `LockRows` **di atas** `Sort`, jadi urutan akuisisi lock
+= urutan `id`:
+
+```text
+LockRows
+  -> Sort (Sort Key: products.id)
+       -> Seq Scan (Filter: id = ANY('{...}'))
 ```
 
 Dengan begitu `A -> B` dan `B -> A` sama-sama mengunci `min(A,B)` lebih dulu.
@@ -293,8 +301,8 @@ k6 run loadtest/deadlock/deadlock-transfer.js
 | `deadlocks` (HTTP 409) | **274** | **0** |
 | `transfers_ok` (HTTP 200) | 24 | **300 / 300** |
 | `http_req_failed` | 0.00% | 0.00% |
-| `transfer_duration` avg | 3.62 s | **70.56 ms** |
-| `transfer_duration` p(95) | 8 s | **214.73 ms** |
+| `transfer_duration` avg | 3.62 s | **31.29 ms** |
+| `transfer_duration` p(95) | 8 s | **123.57 ms** |
 | Konsistensi stok + audit | PASS | PASS |
 
 Output k6 sesudah fix:
@@ -302,17 +310,17 @@ Output k6 sesudah fix:
 ```text
 checks_succeeded...: 100.00% 307 out of 307
 deadlocks......................: 0      0/s
-transfer_duration..............: avg=70.56ms min=4.49ms med=45.01ms max=338.47ms p(90)=170.86ms p(95)=214.73ms
-transfers_ok...................: 300    129.881655/s
+transfer_duration..............: avg=31.29ms min=5.57ms med=10.09ms max=691.84ms p(90)=44.55ms p(95)=123.57ms
+transfers_ok...................: 300    273.933874/s
 http_req_failed................: 0.00%  0 out of 308
-iterations.....................: 300    129.881655/s
+iterations.....................: 300    273.933874/s
 
 === VERIFIKASI DEADLOCK TRANSFER ===
-produk A (id 10027): stok 10000 -> 9990 (delta -10)
-produk B (id 10028): stok 10000 -> 10010 (delta 10)
+produk A (id 10039): stok 10000 -> 9986 (delta -14)
+produk B (id 10040): stok 10000 -> 10014 (delta 14)
 total stok  : awal 20000 / akhir 20000
-audit A     : 300 log, delta -10
-audit B     : 300 log, delta 10
+audit A     : 300 log, delta -14
+audit B     : 300 log, delta 14
 === PASS: total stok konsisten & audit trail rekonsiliasi ===
 ```
 
@@ -320,7 +328,7 @@ Interpretasi:
 
 - **0 deadlock** pada beban yang sama yang sebelumnya menghasilkan 274 deadlock.
 - Semua **300** transfer sukses; tidak ada lagi transaksi yang dibatalkan.
-- Latensi turun drastis (avg 3.62 s → **70 ms**, p95 8 s → **215 ms**) karena
+- Latensi turun drastis (avg 3.62 s → **31 ms**, p95 8 s → **124 ms**) karena
   tidak ada lagi `deadlock_timeout` ±1 detik per konflik.
 - Invariant tetap terjaga: total stok 20000, audit 300 log/produk, rekonsiliasi.
 
@@ -362,4 +370,4 @@ default, test **mewajibkan** `deadlocks == 0` setelah perbaikan.
   diaudit dan dihitung.
 - **Perbaikan berhasil**: dengan urutan lock konsisten (id terkecil dulu),
   deadlock turun dari **274 → 0** pada beban yang sama, semua 300 transfer sukses,
-  dan latensi turun dari avg 3.62 s → 70 ms. Regression test Go juga PASS.
+  dan latensi turun dari avg 3.62 s → 31 ms. Regression test Go juga PASS.
