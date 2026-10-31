@@ -11,6 +11,13 @@ services:
     volumes:
       - postgres_data:/var/lib/postgresql/data
 
+  redis:
+    image: redis:7-alpine
+    container_name: learn-go-redis
+    ports:
+      - 6379:6379
+    volumes:
+      - redis_data:/data
   influxdb:
     image: influxdb:1.8
     container_name: learn-go-influxdb
@@ -40,3 +47,4 @@ volumes:
   postgres_data:
   influxdb_data:
   grafana_data:
+  redis_data:

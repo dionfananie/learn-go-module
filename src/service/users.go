@@ -47,7 +47,7 @@ func (s *UserService) LoginUser(ctx context.Context, user *entities.UserLoginReq
 	return &entities.UserResponse{
 			ID:          userResponse.ID,
 			Name:        userResponse.Name,
-			AccessToken: jwt.Generate(&jwt.TokenPayload{userResponse.ID}),
+			AccessToken: jwt.Generate(&jwt.TokenPayload{UserId: userResponse.ID}),
 			CreatedAt:   userResponse.CreatedAt},
 		nil
 }

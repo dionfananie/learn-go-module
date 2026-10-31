@@ -5,6 +5,7 @@ import (
 	"log"
 	"os"
 	"strconv"
+	"time"
 
 	"github.com/joho/godotenv"
 )
@@ -12,16 +13,31 @@ import (
 var isEnvLoaded = false
 
 var (
-	DB_NAME     = getEnv("DB_NAME", "")
-	DB_PORT     = getEnv("DB_PORT", "")
-	DB_HOST     = getEnv("DB_HOST", "")
-	DB_USERNAME = getEnv("DB_USER", "")
-	DB_PASSWORD = getEnv("DB_PASSWORD", "")
-	DB_PARAMS   = getEnv("DB_PARAMS", "sslmode=disable")
+	DB_NAME        = getEnv("DB_NAME", "")
+	DB_PORT        = getEnv("DB_PORT", "")
+	DB_HOST        = getEnv("DB_HOST", "")
+	DB_USERNAME    = getEnv("DB_USER", "")
+	DB_PASSWORD    = getEnv("DB_PASSWORD", "")
+	DB_PARAMS      = getEnv("DB_PARAMS", "sslmode=disable")
+	REDIS_ADDR     = getEnv("REDIS_ADDR", "localhost:6379")
+	REDIS_PASSWORD = getEnvOptional("REDIS_PASSWORD")
+	CACHE_TIMEOUT  = cacheTimeout()
 
 	JWT_SECRET = getEnv("JWT_SECRET", "")
 	JWT_EXP    = getEnv("JWT_EXP", "8h")
 )
+
+const defaultCacheTimeoutMs = 100
+
+// cacheTimeout membaca CACHE_TIMEOUT_MS (dalam milidetik). Nilai kosong,
+// bukan angka, atau <= 0 akan memakai default 100 ms.
+func cacheTimeout() time.Duration {
+	ms := getEnvAsInt("CACHE_TIMEOUT_MS", defaultCacheTimeoutMs)
+	if ms <= 0 {
+		ms = defaultCacheTimeoutMs
+	}
+	return time.Duration(ms) * time.Millisecond
+}
 
 func loadEnv() {
 	if !isEnvLoaded {
@@ -32,6 +48,13 @@ func loadEnv() {
 		isEnvLoaded = true
 	}
 
+}
+
+// getEnvOptional untuk env yang memang boleh kosong,
+// contoh: REDIS_PASSWORD saat Redis tidak memakai auth.
+func getEnvOptional(name string) string {
+	loadEnv()
+	return os.Getenv(name)
 }
 
 func getEnv(name string, fallback string) string {
