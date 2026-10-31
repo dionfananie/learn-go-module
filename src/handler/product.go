@@ -181,3 +181,50 @@ func (h *ProductHandler) Transaction(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"message": "Transaction success", "data": gin.H{"audit_id": result.AuditID}})
 
 }
+
+func (h *ProductHandler) TransferStock(c *gin.Context) {
+	var req entities.TransferStockRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid request body"})
+		return
+	}
+
+	// Timeout dibuat lebih longgar (30s): PostgreSQL mendeteksi deadlock dalam
+	// ±1 detik (deadlock_timeout) dan membatalkan salah satu transaksi. Timeout
+	// 5 detik terlalu pendek saat antrean lock memanjang, sehingga transaksi yang
+	// sehat ikut dibatalkan menjadi 500 — padahal yang ingin ditunjukkan adalah 409.
+	ctx, cancel := context.WithTimeout(c.Request.Context(), 30*time.Second)
+	defer cancel()
+	c.Request = c.Request.WithContext(ctx)
+
+	userId := c.GetString("userId")
+	result, err := h.service.TransferStock(c.Request.Context(), req.FromID, req.ToID, req.Amount, userId)
+	if err != nil {
+		fmt.Printf("[Error]- Transfer Stock %v\n", err.Error())
+		switch {
+		case errors.Is(err, service.ErrProductNotFound):
+			c.JSON(http.StatusNotFound, gin.H{"error": "Product not found"})
+		case errors.Is(err, service.ErrInsufficientStock):
+			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		case errors.Is(err, service.ErrStockOverflow):
+			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		case errors.Is(err, service.ErrTransferSameProduct):
+			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		case errors.Is(err, service.ErrDeadlock):
+			// 409 Conflict: transaksi jadi korban deadlock dan di-rollback.
+			// Klien diharapkan me-retry.
+			c.JSON(http.StatusConflict, gin.H{"error": err.Error()})
+		default:
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "Internal Server Error"})
+		}
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"message": "Transfer success",
+		"data": gin.H{
+			"from": gin.H{"old_stock": result.FromOld, "new_stock": result.FromNew},
+			"to":   gin.H{"old_stock": result.ToOld, "new_stock": result.ToNew},
+		},
+	})
+}

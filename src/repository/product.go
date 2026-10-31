@@ -141,3 +141,71 @@ func (r *ProductRepository) UpdateProduct(ctx context.Context, tx *sql.Tx, produ
 
 	return int(stock), int(newStock), nil
 }
+
+// TransferStock memindahkan sejumlah stok dari satu produk ke produk lain di dalam
+// SATU transaksi. Urutan lock selalu: source (fromId) dulu, lalu destination (toId).
+//
+//	PERHATIAN — inilah sumber deadlock:
+//	dua transfer berlawanan arah (A->B dan B->A) yang berjalan bersamaan akan
+//	mengunci dalam urutan terbalik:
+//	  tx1: kunci A, lalu menunggu B
+//	  tx2: kunci B, lalu menunggu A
+//	=> circular wait => PostgreSQL membatalkan salah satu dengan SQLSTATE 40P01.
+func (r *ProductRepository) TransferStock(ctx context.Context, tx *sql.Tx, fromId, toId int, amount int32) (fromOld, fromNew, toOld, toNew int, err error) {
+	// 1) Kunci + baca stok source.
+	var fromStock int32
+	err = tx.QueryRowContext(ctx,
+		"SELECT stock FROM products WHERE id = $1 FOR UPDATE",
+		fromId,
+	).Scan(&fromStock)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return 0, 0, 0, 0, ErrProductNotFound
+		}
+		return 0, 0, 0, 0, err
+	}
+
+	// 2) Kunci + baca stok destination. Baris inilah yang memicu deadlock
+	//    ketika lawan transaksi memegang lock destination dan sedang menunggu source.
+	var toStock int32
+	err = tx.QueryRowContext(ctx,
+		"SELECT stock FROM products WHERE id = $1 FOR UPDATE",
+		toId,
+	).Scan(&toStock)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return 0, 0, 0, 0, ErrProductNotFound
+		}
+		return 0, 0, 0, 0, err
+	}
+
+	// 3) Validasi stok source cukup.
+	if fromStock < amount {
+		return 0, 0, 0, 0, ErrInsufficientStock
+	}
+
+	// 4) Hitung nilai baru (int64 dulu agar restock ekstrem tidak overflow).
+	toNew64 := int64(toStock) + int64(amount)
+	if toNew64 > int64(1<<31-1) {
+		return 0, 0, 0, 0, ErrStockOverflow
+	}
+
+	fromNew32 := fromStock - amount
+	toNew32 := int32(toNew64)
+
+	// 5) Tulis kedua baris. Lock masih dipegang sampai tx di-COMMIT.
+	if _, err = tx.ExecContext(ctx,
+		"UPDATE products SET stock = $1 WHERE id = $2",
+		fromNew32, fromId,
+	); err != nil {
+		return 0, 0, 0, 0, err
+	}
+	if _, err = tx.ExecContext(ctx,
+		"UPDATE products SET stock = $1 WHERE id = $2",
+		toNew32, toId,
+	); err != nil {
+		return 0, 0, 0, 0, err
+	}
+
+	return int(fromStock), int(fromNew32), int(toStock), int(toNew32), nil
+}

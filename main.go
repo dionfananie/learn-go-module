@@ -48,6 +48,7 @@ func main() {
 	protected.POST("/products", productHandler.Create)
 	protected.DELETE("/products/:id", productHandler.DeleteProduct)
 	protected.PATCH("/products/:id/update-stock", productHandler.Transaction)
+	protected.POST("/products/transfer-stock", productHandler.TransferStock)
 
 	fmt.Println("Server running at http://localhost:8080")
 
