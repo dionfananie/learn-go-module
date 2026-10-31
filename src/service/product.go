@@ -112,3 +112,57 @@ func (s *ProductService) Transaction(ctx context.Context, productId int, delta i
 	}
 	return &AdjustStockResult{AuditID: auditID}, nil
 }
+
+type TransferStockResult struct {
+	FromOld int
+	FromNew int
+	ToOld   int
+	ToNew   int
+}
+
+// TransferStock memindahkan sejumlah stok antar dua produk dalam satu transaksi.
+// Deadlock (SQLSTATE 40P01) dipetakan menjadi ErrDeadlock agar handler bisa
+// membalas dengan status yang jelas (409) alih-alih 500 generik.
+func (s *ProductService) TransferStock(ctx context.Context, fromId, toId int, amount int32, userId string) (*TransferStockResult, error) {
+	if fromId == toId {
+		return nil, ErrTransferSameProduct
+	}
+
+	tx, err := s.repo.BeginTx(ctx)
+	if err != nil {
+		return nil, err
+	}
+	defer tx.Rollback()
+
+	fromOld, fromNew, toOld, toNew, err := s.repo.TransferStock(ctx, tx, fromId, toId, amount)
+	if err != nil {
+		switch {
+		case errors.Is(err, repository.ErrProductNotFound):
+			return nil, ErrProductNotFound // 404
+		case errors.Is(err, repository.ErrInsufficientStock):
+			return nil, ErrInsufficientStock // 400
+		case errors.Is(err, repository.ErrStockOverflow):
+			return nil, ErrStockOverflow // 400
+		case isDeadlock(err):
+			return nil, ErrDeadlock // 409
+		}
+		return nil, err
+	}
+
+	// Catat jejak audit untuk kedua sisi transfer.
+	if _, err := s.auditRepo.Create(ctx, tx, fromId, userId, "transfer_out", fromOld, fromNew); err != nil {
+		return nil, err
+	}
+	if _, err := s.auditRepo.Create(ctx, tx, toId, userId, "transfer_in", toOld, toNew); err != nil {
+		return nil, err
+	}
+
+	if err := tx.Commit(); err != nil {
+		if isDeadlock(err) {
+			return nil, ErrDeadlock // 409
+		}
+		return nil, err
+	}
+
+	return &TransferStockResult{FromOld: fromOld, FromNew: fromNew, ToOld: toOld, ToNew: toNew}, nil
+}

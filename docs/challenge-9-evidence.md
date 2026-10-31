@@ -178,6 +178,54 @@ chainOk                                  // old_stock -> new_stock tersambung
 successful_updates <= TARGET_STOCK       // tidak oversell
 ```
 
+### 3.1 Log detail: user, row, dan sesi yang menunggu
+
+Perintah:
+
+```bash
+VUS=5 ITERATIONS=10 HOLD_SECONDS=4 ./loadtest/concurrent/run-concurrency-logging.sh
+```
+
+Runner ini menahan lock row dengan sesi psql, menjalankan k6 (satu user per VU, semua ke row yang sama), dan polling `pg_stat_activity` setiap 0,5 detik.
+
+Log k6 (ringkas):
+
+```text
+[VU 1 | user 1 conclog_1_...] START update row=10009 delta=1
+[VU 2 | user 2 conclog_2_...] START update row=10009 delta=1
+[VU 3 | user 3 conclog_3_...] START update row=10009 delta=1
+[VU 4 | user 4 conclog_4_...] START update row=10009 delta=1
+[VU 5 | user 5 conclog_5_...] START update row=10009 delta=1
+[VU 1 | user 1 ...] DONE row=10009 status=200 duration=2483ms <-- MENUNGGU LOCK / ANTRE
+[VU 2 | user 2 ...] DONE row=10009 status=200 duration=2500ms <-- MENUNGGU LOCK / ANTRE
+[VU 3 | user 3 ...] DONE row=10009 status=200 duration=2444ms <-- MENUNGGU LOCK / ANTRE
+[VU 4 | user 4 ...] DONE row=10009 status=200 duration=2438ms <-- MENUNGGU LOCK / ANTRE
+[VU 5 | user 5 ...] DONE row=10009 status=200 duration=2451ms <-- MENUNGGU LOCK / ANTRE
+[VU 4 | user 4 ...] DONE row=10009 status=200 duration=18ms
+[VU 3 | user 3 ...] DONE row=10009 status=200 duration=18ms
+[teardown] row=10009 final_stock=990
+```
+
+Log waiting dari `pg_stat_activity`:
+
+```text
+20:05:07 waiting=0
+20:05:07 waiting=5 | 1657:SELECT stock FROM products WHERE id = $1 FOR UPDATE | 1655:... | 1658:... | 1660:... | 1652:...
+20:05:08 waiting=5 | ...
+20:05:09 waiting=5 | ...
+20:05:09 waiting=5 | ...
+20:05:10 waiting=0
+```
+
+Interpretasi:
+
+- 5 user berbeda (satu per VU) meng-update row yang **sama** (`product_id=10009`).
+- Selama lock ditahan, `pg_stat_activity` mencatat **5 sesi** dengan `wait_event_type='Lock'`, semuanya menjalankan `SELECT ... FOR UPDATE`.
+- Request pertama menunggu ±2,4–2,5 detik sampai lock dilepas; setelah itu request berikutnya hanya ±15–42 ms.
+- Stok akhir `990` = `1000 - 10` update sukses → konsisten, tidak ada lost update.
+
+Catatan: nama user dan durasi bervariasi tiap run; yang penting polanya: user berbeda, row sama, durasi panjang saat lock ditahan, dan hasil akhir konsisten.
+
 ---
 
 ## 4. Rollback saat audit gagal

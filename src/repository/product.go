@@ -141,3 +141,73 @@ func (r *ProductRepository) UpdateProduct(ctx context.Context, tx *sql.Tx, produ
 
 	return int(stock), int(newStock), nil
 }
+
+// TransferStock memindahkan sejumlah stok dari satu produk ke produk lain di dalam
+// SATU transaksi.
+//
+// ANTI-DEADLOCK — urutan lock dibuat deterministik berdasarkan id: baris dengan
+// id LEBIH KECIL selalu dikunci lebih dulu, apa pun arah transfernya.
+//
+//	Dulu (rawan deadlock):
+//	  tx1 (A->B): kunci A, lalu menunggu B
+//	  tx2 (B->A): kunci B, lalu menunggu A   => circular wait => SQLSTATE 40P01
+//
+//	Sekarang (aman):
+//	  tx1 (A->B) & tx2 (B->A) sama-sama mengunci min(A,B) dulu, baru max(A,B)
+//	  => tidak ada circular wait; transaksi kedua cukup menunggu yang pertama commit.
+func (r *ProductRepository) TransferStock(ctx context.Context, tx *sql.Tx, fromId, toId int, amount int32) (fromOld, fromNew, toOld, toNew int, err error) {
+	// 1) Tentukan urutan lock yang konsisten: id kecil dulu, lalu id besar.
+	firstId, secondId := fromId, toId
+	if firstId > secondId {
+		firstId, secondId = secondId, firstId
+	}
+
+	// 2) Kunci + baca stok sesuai urutan tersebut. Karena semua transaksi
+	//    mengikuti urutan yang SAMA, tidak mungkin terjadi saling menunggu.
+	stocks := make(map[int]int32, 2)
+	for _, id := range []int{firstId, secondId} {
+		var stock int32
+		if err := tx.QueryRowContext(ctx,
+			"SELECT stock FROM products WHERE id = $1 FOR UPDATE", id,
+		).Scan(&stock); err != nil {
+			if errors.Is(err, sql.ErrNoRows) {
+				return 0, 0, 0, 0, ErrProductNotFound
+			}
+			return 0, 0, 0, 0, err
+		}
+		stocks[id] = stock
+	}
+
+	fromStock := stocks[fromId]
+	toStock := stocks[toId]
+
+	// 3) Validasi stok source cukup.
+	if fromStock < amount {
+		return 0, 0, 0, 0, ErrInsufficientStock
+	}
+
+	// 4) Hitung nilai baru (int64 dulu agar restock ekstrem tidak overflow).
+	toNew64 := int64(toStock) + int64(amount)
+	if toNew64 > int64(1<<31-1) {
+		return 0, 0, 0, 0, ErrStockOverflow
+	}
+
+	fromNew32 := fromStock - amount
+	toNew32 := int32(toNew64)
+
+	// 5) Tulis kedua baris. Lock masih dipegang sampai tx di-COMMIT.
+	if _, err = tx.ExecContext(ctx,
+		"UPDATE products SET stock = $1 WHERE id = $2",
+		fromNew32, fromId,
+	); err != nil {
+		return 0, 0, 0, 0, err
+	}
+	if _, err = tx.ExecContext(ctx,
+		"UPDATE products SET stock = $1 WHERE id = $2",
+		toNew32, toId,
+	); err != nil {
+		return 0, 0, 0, 0, err
+	}
+
+	return int(fromStock), int(fromNew32), int(toStock), int(toNew32), nil
+}

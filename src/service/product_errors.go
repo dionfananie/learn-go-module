@@ -10,4 +10,6 @@ var (
 	ErrProductStockInvalid  = errors.New("product stock cannot be negative")
 	ErrInsufficientStock    = errors.New("product stock insufficient")
 	ErrStockOverflow        = errors.New("resulting stock exceeds int32 limit")
+	ErrDeadlock             = errors.New("deadlock detected, please retry")
+	ErrTransferSameProduct  = errors.New("from_id and to_id must be different")
 )
