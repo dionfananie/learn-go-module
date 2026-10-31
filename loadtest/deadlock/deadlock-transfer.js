@@ -2,40 +2,49 @@ import http from 'k6/http';
 import { check } from 'k6';
 import { Counter, Trend } from 'k6/metrics';
 
-// Reproduksi DEADLOCK di level database lewat transfer stok antar dua produk.
+// Stress test transfer stok antar dua produk untuk skenario DEADLOCK.
 //
-// Endpoint POST /products/transfer-stock mengunci dua baris dalam SATU transaksi
-// dengan urutan TETAP: source dulu, lalu destination (SELECT ... FOR UPDATE).
-// Saat dua transfer berlawanan arah (A->B dan B->A) berjalan bersamaan:
-//   tx1: kunci A, lalu menunggu B
-//   tx2: kunci B, lalu menunggu A
+// Endpoint POST /products/transfer-stock mengunci dua baris dalam SATU transaksi.
+//
+// SEBELUM fix (rawan deadlock): urutan lock mengikuti arah transfer (source dulu).
+//   tx1 (A->B): kunci A, lalu menunggu B
+//   tx2 (B->A): kunci B, lalu menunggu A
 //   => circular wait => PostgreSQL membatalkan salah satu (SQLSTATE 40P01)
 //      => endpoint membalas HTTP 409.
 //
-// Test ini menghitung berapa deadlock yang terdeteksi, mencatat SETIAP deadlock
-// ke log ([VU n] DEADLOCK: ...), dan teardown memastikan TOTAL stok tetap terjaga
-// (transfer hanya memindahkan, tidak menciptakan/menghilangkan stok) — jadi
-// deadlock TIDAK menyebabkan lost update.
+// SESUDAH fix (anti-deadlock): kedua transaksi mengunci berdasarkan id terkecil
+// lebih dulu, apa pun arahnya => tidak ada circular wait, deadlock = 0.
+//
+// Dua mode:
+//   - default (kode sudah diperbaiki) : WAJIB 0 deadlock  (deadlocks count==0)
+//   - EXPECT_DEADLOCK=1 (kode lama)   : WAJIB ada deadlock (deadlocks count>0)
+//     -> dipakai sebagai negative control / mereproduksi bug lama.
+//
+// Test tetap mencatat SETIAP deadlock ke log ([VU n] DEADLOCK: ...), dan teardown
+// memastikan TOTAL stok kekal serta audit trail rekonsiliasi — jadi tidak ada
+// lost update, baik saat ada deadlock maupun tidak.
 //
 // Cara pakai:
-//   k6 run loadtest/deadlock/deadlock-transfer.js               # 10 VU, 300 iter
+//   k6 run loadtest/deadlock/deadlock-transfer.js               # 10 VU, 300 iter, harapkan 0 deadlock
 //   SMOKE=1 k6 run loadtest/deadlock/deadlock-transfer.js       # 2 VU, 40 iter (cepat)
+//   EXPECT_DEADLOCK=1 k6 run loadtest/deadlock/deadlock-transfer.js  # verifikasi bug lama (harus > 0)
 //   VUS=20 ITERATIONS=600 STOCK=50000 k6 run loadtest/deadlock/deadlock-transfer.js
 
 const BASE_URL = __ENV.BASE_URL || 'http://localhost:8080';
 const SMOKE = Boolean(__ENV.SMOKE);
+const EXPECT_DEADLOCK = (__ENV.EXPECT_DEADLOCK || '') === '1';
 const VUS = Number(__ENV.VUS || 10);
 const ITERATIONS = SMOKE ? 40 : Number(__ENV.ITERATIONS || 300);
 const STOCK = Number(__ENV.STOCK || 10000);
 const AMOUNT = Number(__ENV.AMOUNT || 1);
 
 const transfersOK = new Counter('transfers_ok'); // 200 -> transfer sukses
-const deadlocks = new Counter('deadlocks'); // 409 -> jadi korban deadlock (ini yang kita amati)
+const deadlocks = new Counter('deadlocks'); // 409 -> jadi korban deadlock
 const insufficient = new Counter('insufficient'); // 400 -> stok source habis
 const transferDuration = new Trend('transfer_duration', true);
 
 // 200 = sukses, 201 = register/create, 400 = stok source kurang,
-// 404 = produk hilang, 409 = deadlock (ekspektasi skenario ini).
+// 404 = produk hilang, 409 = deadlock (tetap diterima sebagai respons yang valid).
 http.setResponseCallback(http.expectedStatuses(200, 201, 400, 404, 409));
 
 export const options = {
@@ -49,15 +58,13 @@ export const options = {
   },
   thresholds: {
     http_req_failed: ['rate<0.01'],
-    // Deadlock baru terdeteksi setelah deadlock_timeout PostgreSQL (±1 detik),
-    // lalu transaksi pemenang tetap harus menunggu antrean lock. Jadi p(95)
-    // wajar berada di kisaran beberapa detik.
+    // Tanpa deadlock, transfer selesai jauh lebih cepat (hanya antre lock biasa).
     transfer_duration: ['p(95)<15000'],
     // Sanity: jumlah sukses tidak boleh melebihi total iterasi.
     transfers_ok: [`count<=${ITERATIONS}`],
-    // Full run WAJIB menghasilkan minimal satu deadlock (bukti skenario jalan).
-    // Smoke run tidak diwajibkan — concurrency rendah bisa 0 deadlock.
-    ...(SMOKE ? {} : { deadlocks: ['count>0'] }),
+    // Setelah fix: WAJIB 0 deadlock. Mode EXPECT_DEADLOCK membalik assertion
+    // untuk membuktikan bug lama masih bisa tereproduksi.
+    deadlocks: EXPECT_DEADLOCK ? ['count>0'] : ['count==0'],
   },
 };
 

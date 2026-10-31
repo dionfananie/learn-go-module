@@ -6,12 +6,14 @@ Tanggal pengujian: 2026-10-31
 
 | Aspek | Alat / Cara | Hasil |
 |---|---|---|
-| Deadlock dua transaksi berlawanan arah | k6 + endpoint `transfer-stock` | **276 deadlock** terdeteksi (HTTP 409) |
+| Deadlock dua transaksi berlawanan arah (kode lama) | k6 + endpoint `transfer-stock` | **276 deadlock** terdeteksi (HTTP 409) |
 | Korban deadlock di-rollback penuh | teardown k6 (stok + audit) | total stok **20000 → 20000**, audit **rekonsiliasi** |
 | Sesi saling menunggu lock | `pg_stat_activity` | **waiting = 10** (semua VU) |
 | Transaksi dibatalkan PostgreSQL | `pg_stat_database.deadlocks` | **+276** selama run |
 | Request gagal tak terduga | `http_req_failed` | **0.00%** |
 | Iterasi selesai | k6 | **300/300**, 0 dropped |
+| **Setelah fix (urutan lock konsisten)** | k6, beban sama | **0 deadlock**, **300/300 sukses**, avg **70 ms** |
+| **Regression test fix** | `go test -tags integration` | **PASS**, `deadlock=0` |
 
 ---
 
@@ -245,13 +247,119 @@ Cara mencegah/mengurangi deadlock:
 
 ---
 
+## 9. Perbaikan: urutan lock konsisten (deadlock → 0)
+
+### Akar masalah
+
+`TransferStock` mengunci baris mengikuti **arah transfer** (source dulu):
+
+```go
+// SEBELUM: source dulu, destination belakangan
+SELECT stock FROM products WHERE id = $from FOR UPDATE;  // lock #1
+SELECT stock FROM products WHERE id = $to   FOR UPDATE;  // lock #2
+```
+
+Dua transfer berlawanan arah jadi mengunci dengan urutan terbalik → circular wait.
+
+### Perbaikan
+
+Kedua baris dikunci dengan **urutan deterministik berdasarkan id** (id terkecil
+dulu), apa pun arah transfernya:
+
+```go
+// SESUDAH: id terkecil selalu dikunci lebih dulu
+firstId, secondId := fromId, toId
+if firstId > secondId {
+    firstId, secondId = secondId, firstId
+}
+// lock firstId, lalu lock secondId  (SELECT ... FOR UPDATE)
+```
+
+Dengan begitu `A -> B` dan `B -> A` sama-sama mengunci `min(A,B)` lebih dulu.
+Transaksi kedua hanya **menunggu** transaksi pertama commit — tidak ada lagi
+saling menunggu, sehingga deadlock tidak mungkin terbentuk.
+
+### Hasil sebelum vs sesudah
+
+Perintah (aplikasi fixed):
+
+```bash
+go run main.go
+k6 run loadtest/deadlock/deadlock-transfer.js
+```
+
+| Metrik (10 VU, 300 iterasi) | Sebelum fix | Sesudah fix |
+|---|---|---|
+| `deadlocks` (HTTP 409) | **274** | **0** |
+| `transfers_ok` (HTTP 200) | 24 | **300 / 300** |
+| `http_req_failed` | 0.00% | 0.00% |
+| `transfer_duration` avg | 3.62 s | **70.56 ms** |
+| `transfer_duration` p(95) | 8 s | **214.73 ms** |
+| Konsistensi stok + audit | PASS | PASS |
+
+Output k6 sesudah fix:
+
+```text
+checks_succeeded...: 100.00% 307 out of 307
+deadlocks......................: 0      0/s
+transfer_duration..............: avg=70.56ms min=4.49ms med=45.01ms max=338.47ms p(90)=170.86ms p(95)=214.73ms
+transfers_ok...................: 300    129.881655/s
+http_req_failed................: 0.00%  0 out of 308
+iterations.....................: 300    129.881655/s
+
+=== VERIFIKASI DEADLOCK TRANSFER ===
+produk A (id 10027): stok 10000 -> 9990 (delta -10)
+produk B (id 10028): stok 10000 -> 10010 (delta 10)
+total stok  : awal 20000 / akhir 20000
+audit A     : 300 log, delta -10
+audit B     : 300 log, delta 10
+=== PASS: total stok konsisten & audit trail rekonsiliasi ===
+```
+
+Interpretasi:
+
+- **0 deadlock** pada beban yang sama yang sebelumnya menghasilkan 274 deadlock.
+- Semua **300** transfer sukses; tidak ada lagi transaksi yang dibatalkan.
+- Latensi turun drastis (avg 3.62 s → **70 ms**, p95 8 s → **215 ms**) karena
+  tidak ada lagi `deadlock_timeout` ±1 detik per konflik.
+- Invariant tetap terjaga: total stok 20000, audit 300 log/produk, rekonsiliasi.
+
+### Regression test (Go)
+
+Ditambahkan `src/repository/product_deadlock_integration_test.go`: 20 goroutine
+melakukan 300 transfer dua arah bersamaan, lalu memastikan **0 error `40P01`**
+dan total stok kekal.
+
+```bash
+TEST_DATABASE_URL='postgres://postgres:postgres@localhost:5000/learn_go?sslmode=disable' \
+  go test -tags integration ./src/repository/ -run TestTransferStockNoDeadlock -v -count=1
+```
+
+```text
+=== RUN   TestTransferStockNoDeadlock
+    product_deadlock_integration_test.go:90: transfer sukses=300 deadlock=0 error lain=0
+--- PASS: TestTransferStockNoDeadlock (0.91s)
+PASS
+ok  	learn-go/src/repository	0.919s
+```
+
+Catatan: test k6 tetap menyediakan mode `EXPECT_DEADLOCK=1` untuk membuktikan
+skenario bug lama masih bisa mereproduksi deadlock (negative control). Secara
+default, test **mewajibkan** `deadlocks == 0` setelah perbaikan.
+
+---
+
 ## Kesimpulan
 
-- Skenario deadlock **terbukti tereproduksi**: 276 deadlock (SQLSTATE `40P01`)
-  dari 300 iterasi transfer berlawanan arah, terlihat juga di `pg_stat_database`.
+- Skenario deadlock **terbukti tereproduksi** pada kode lama: 276 deadlock
+  (SQLSTATE `40P01`) dari 300 iterasi transfer berlawanan arah, terlihat juga di
+  `pg_stat_database` dan `pg_stat_activity` (`waiting=10`).
 - Endpoint memetakan deadlock ke **409 Conflict** yang jelas dan bisa di-retry,
   bukan 500 generik.
 - Korban deadlock **di-rollback penuh**: total stok tetap 20000 dan audit trail
   rekonsiliasi dengan perubahan stok — **tidak ada lost update**.
 - Setiap deadlock **tercatat di log k6** (`[VU n] DEADLOCK: ...`) sehingga mudah
   diaudit dan dihitung.
+- **Perbaikan berhasil**: dengan urutan lock konsisten (id terkecil dulu),
+  deadlock turun dari **274 → 0** pada beban yang sama, semua 300 transfer sukses,
+  dan latensi turun dari avg 3.62 s → 70 ms. Regression test Go juga PASS.

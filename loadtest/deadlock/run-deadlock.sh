@@ -16,6 +16,7 @@ BASE_URL="${BASE_URL:-http://localhost:8080}"
 VUS="${VUS:-10}"
 ITERATIONS="${ITERATIONS:-300}"
 STOCK="${STOCK:-10000}"
+EXPECT_DEADLOCK="${EXPECT_DEADLOCK:-0}"
 WAIT_LOG=/tmp/deadlock-waits.log
 K6_LOG=/tmp/deadlock-k6.log
 
@@ -47,8 +48,8 @@ echo "deadlock counter awal : $DEADLOCK_BEFORE"
 ) &
 POLLER_PID=$!
 
-echo "menjalankan k6 (VUS=$VUS ITERATIONS=$ITERATIONS STOCK=$STOCK) ..."
-VUS="$VUS" ITERATIONS="$ITERATIONS" STOCK="$STOCK" \
+echo "menjalankan k6 (VUS=$VUS ITERATIONS=$ITERATIONS STOCK=$STOCK EXPECT_DEADLOCK=$EXPECT_DEADLOCK) ..."
+VUS="$VUS" ITERATIONS="$ITERATIONS" STOCK="$STOCK" EXPECT_DEADLOCK="$EXPECT_DEADLOCK" \
   k6 run loadtest/deadlock/deadlock-transfer.js 2>&1 | tee "$K6_LOG"
 
 kill "$POLLER_PID" 2>/dev/null || true
@@ -66,9 +67,9 @@ echo "=== RINGKASAN K6 ==="
 grep -E "deadlocks|transfers_ok|insufficient|transfer_duration|http_req_failed|PASS|INKONSISTEN" "$K6_LOG" | tail -20
 echo
 echo "=== CONTOH LOG DEADLOCK (dari k6) ==="
-grep -m 10 -E "DEADLOCK:" "$K6_LOG" || true
+grep -m 10 -E '\[VU [0-9]+\] DEADLOCK:' "$K6_LOG" || true
 echo
-deadlock_lines=$(grep -cE 'DEADLOCK:' "$K6_LOG" || true)
+deadlock_lines=$(grep -cE '\[VU [0-9]+\] DEADLOCK:' "$K6_LOG" || true)
 echo "total baris DEADLOCK: ${deadlock_lines:-0}"
 echo
 echo "=== LOG LENGKAP ==="
