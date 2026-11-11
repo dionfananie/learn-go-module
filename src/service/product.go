@@ -4,17 +4,33 @@ import (
 	"context"
 	"database/sql"
 	"errors"
+	"fmt"
+	"learn-go/src/cache"
 	"learn-go/src/entities"
 	"learn-go/src/repository"
+	"log"
+	"time"
+
+	"golang.org/x/sync/singleflight"
 )
+
+const productCacheTTL = 5 * time.Minute
+const productLoadTimeout = 2 * time.Second
+const cacheInvalidateDelay = 200 * time.Millisecond
+
+func productCacheKey(id int) string {
+	return fmt.Sprintf("productId:%d", id)
+}
 
 type ProductService struct {
 	repo      *repository.ProductRepository
 	auditRepo *repository.AuditRepository
+	cache     *cache.Client
+	sf        singleflight.Group
 }
 
-func NewProductService(repo *repository.ProductRepository, auditRepo *repository.AuditRepository) *ProductService {
-	return &ProductService{repo, auditRepo}
+func NewProductService(repo *repository.ProductRepository, auditRepo *repository.AuditRepository, cacheClient *cache.Client) *ProductService {
+	return &ProductService{repo: repo, auditRepo: auditRepo, cache: cacheClient}
 }
 
 func (s *ProductService) Create(ctx context.Context, product *entities.Product, userId string) error {
@@ -42,15 +58,43 @@ func (s *ProductService) GetProductAll(ctx context.Context) ([]entities.Product,
 }
 
 func (s *ProductService) GetProduct(ctx context.Context, id int) (*entities.Product, error) {
-	product, err := s.repo.GetProduct(ctx, id)
+	key := productCacheKey(id)
 
-	if errors.Is(err, sql.ErrNoRows) {
-		return nil, ErrProductNotFound
+	var cached entities.Product
+	if s.cache.GetJSON(ctx, key, &cached) {
+		return &cached, nil
+	}
+
+	// Do mengembalikan 3 nilai: value, error, dan shared (bool).
+	v, err, shared := s.sf.Do(key, func() (any, error) {
+		loadCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), productLoadTimeout)
+		defer cancel()
+
+		// Double-check: mungkin goroutine lain sudah mengisi cache.
+		var fresh entities.Product
+		if s.cache.GetJSON(loadCtx, key, &fresh) {
+			return &fresh, nil
+		}
+
+		product, err := s.repo.GetProduct(loadCtx, id)
+		if errors.Is(err, sql.ErrNoRows) {
+			return nil, ErrProductNotFound
+		}
+		if err != nil {
+			return nil, err
+		}
+
+		s.cache.SetJSON(loadCtx, key, product, productCacheTTL)
+		return product, nil
+	})
+	if shared {
+		log.Printf("[Singleflight]: %s menumpang hasil goroutine lain", key)
 	}
 	if err != nil {
 		return nil, err
 	}
-	return product, nil
+
+	return v.(*entities.Product), nil
 }
 
 func (s *ProductService) GetProductAuditLogs(ctx context.Context, productId int) ([]entities.AuditLog, error) {
@@ -63,14 +107,17 @@ func (s *ProductService) GetProductAuditLogs(ctx context.Context, productId int)
 
 func (s *ProductService) DeleteProduct(ctx context.Context, id int, userId string) error {
 	err := s.repo.DeleteProduct(ctx, id, userId)
-	switch {
-	case errors.Is(err, repository.ErrProductNotFound):
-		return ErrProductNotFound // 404
-	case errors.Is(err, repository.ErrProductNotAuthorized):
-		return ErrProductNotAuthorized // 403
+	if err != nil {
+		switch {
+		case errors.Is(err, repository.ErrProductNotFound):
+			return ErrProductNotFound // 404
+		case errors.Is(err, repository.ErrProductNotAuthorized):
+			return ErrProductNotAuthorized // 403
+		}
+		return err
 	}
-	return err
-
+	s.invalidateCache(ctx, productCacheKey(id))
+	return nil
 }
 
 type AdjustStockResult struct {
@@ -110,6 +157,7 @@ func (s *ProductService) Transaction(ctx context.Context, productId int, delta i
 	if err := tx.Commit(); err != nil {
 		return nil, err
 	}
+	s.invalidateCache(ctx, productCacheKey(productId))
 	return &AdjustStockResult{AuditID: auditID}, nil
 }
 
@@ -163,6 +211,23 @@ func (s *ProductService) TransferStock(ctx context.Context, fromId, toId int, am
 		}
 		return nil, err
 	}
-
+	s.invalidateCache(ctx, productCacheKey(fromId), productCacheKey(toId))
 	return &TransferStockResult{FromOld: fromOld, FromNew: fromNew, ToOld: toOld, ToNew: toNew}, nil
+}
+
+func (s *ProductService) invalidateCache(ctx context.Context, keys ...string) {
+	if len(keys) == 0 {
+		return
+	}
+	s.cache.Delete(ctx, keys...)
+
+	clone := make([]string, len(keys))
+	copy(clone, keys)
+
+	// time.AfterFunc lebih ringan daripada go func + time.Sleep (tidak
+	// meninggalkan goroutine tidur yang menumpuk).
+	time.AfterFunc(cacheInvalidateDelay, func() {
+		// jangan pakai ctx request: client bisa saja sudah disconnect.
+		s.cache.Delete(context.Background(), clone...)
+	})
 }

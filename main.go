@@ -2,6 +2,8 @@ package main
 
 import (
 	"fmt"
+	"learn-go/src/cache"
+	"learn-go/src/config"
 	database "learn-go/src/database"
 	"learn-go/src/handler"
 	"learn-go/src/middleware"
@@ -20,7 +22,12 @@ func main() {
 	}
 	defer db.Close()
 	fmt.Println("DB Connected!")
-
+	rdb, err := database.ConnectRedis()
+	if err != nil {
+		log.Printf("Redis is unavailable, check it later: %v", err)
+	}
+	defer rdb.Close()
+	fmt.Println("Cache Connected!")
 	router := gin.Default()
 	router.GET("/", func(c *gin.Context) {
 		c.String(200, "Running Go")
@@ -36,7 +43,8 @@ func main() {
 
 	productRepo := repository.NewProductRepository(db)
 	auditRepo := repository.NewAuditRepository(db)
-	productService := service.NewProductService(productRepo, auditRepo)
+	cacheClient := cache.New(rdb, config.CACHE_TIMEOUT)
+	productService := service.NewProductService(productRepo, auditRepo, cacheClient)
 	productHandler := handler.NewProductHandler(productService)
 
 	router.GET("/products/:id", productHandler.GetProduct)
