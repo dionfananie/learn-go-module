@@ -16,6 +16,7 @@ import (
 
 const productCacheTTL = 5 * time.Minute
 const productLoadTimeout = 2 * time.Second
+const cacheInvalidateDelay = 200 * time.Millisecond
 
 func productCacheKey(id int) string {
 	return fmt.Sprintf("productId:%d", id)
@@ -115,7 +116,7 @@ func (s *ProductService) DeleteProduct(ctx context.Context, id int, userId strin
 		}
 		return err
 	}
-	s.cache.Delete(ctx, productCacheKey(id))
+	s.invalidateCache(ctx, productCacheKey(id))
 	return nil
 }
 
@@ -156,7 +157,7 @@ func (s *ProductService) Transaction(ctx context.Context, productId int, delta i
 	if err := tx.Commit(); err != nil {
 		return nil, err
 	}
-	s.cache.Delete(ctx, productCacheKey(productId))
+	s.invalidateCache(ctx, productCacheKey(productId))
 	return &AdjustStockResult{AuditID: auditID}, nil
 }
 
@@ -210,7 +211,23 @@ func (s *ProductService) TransferStock(ctx context.Context, fromId, toId int, am
 		}
 		return nil, err
 	}
-	s.cache.Delete(ctx, productCacheKey(fromId), productCacheKey(toId))
-
+	s.invalidateCache(ctx, productCacheKey(fromId), productCacheKey(toId))
 	return &TransferStockResult{FromOld: fromOld, FromNew: fromNew, ToOld: toOld, ToNew: toNew}, nil
+}
+
+func (s *ProductService) invalidateCache(ctx context.Context, keys ...string) {
+	if len(keys) == 0 {
+		return
+	}
+	s.cache.Delete(ctx, keys...)
+
+	clone := make([]string, len(keys))
+	copy(clone, keys)
+
+	// time.AfterFunc lebih ringan daripada go func + time.Sleep (tidak
+	// meninggalkan goroutine tidur yang menumpuk).
+	time.AfterFunc(cacheInvalidateDelay, func() {
+		// jangan pakai ctx request: client bisa saja sudah disconnect.
+		s.cache.Delete(context.Background(), clone...)
+	})
 }
