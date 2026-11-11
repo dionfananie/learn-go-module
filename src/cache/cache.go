@@ -60,10 +60,15 @@ func (c *Client) GetJSON(ctx context.Context, key string, dst any) bool {
 	if err != nil {
 		if errors.Is(err, redis.Nil) {
 			log.Printf("[cache] MISS %s", key)
-		} else {
-			// Redis bermasalah: anggap miss agar request tetap jalan.
-			c.markFailure(err)
+			return false
 		}
+		if ctx.Err() != nil {
+			// Request dibatalkan/di-timeout oleh client: bukan Redis yang salah,
+			// jangan buat request lain ikut melewati cache.
+			return false
+		}
+		// Redis bermasalah: anggap miss agar request tetap jalan.
+		c.markFailure(err)
 		return false
 	}
 
@@ -92,7 +97,9 @@ func (c *Client) SetJSON(ctx context.Context, key string, val any, ttl time.Dura
 	defer cancel()
 
 	if err := c.rdb.Set(cctx, key, raw, ttl).Err(); err != nil {
-		c.markFailure(err)
+		if ctx.Err() == nil {
+			c.markFailure(err)
+		}
 	}
 }
 
@@ -107,6 +114,8 @@ func (c *Client) Delete(ctx context.Context, keys ...string) {
 	defer cancel()
 
 	if err := c.rdb.Del(cctx, keys...).Err(); err != nil {
-		c.markFailure(err)
+		if ctx.Err() == nil {
+			c.markFailure(err)
+		}
 	}
 }

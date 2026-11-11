@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"path/filepath"
 	"strconv"
 	"time"
 
@@ -40,14 +41,34 @@ func cacheTimeout() time.Duration {
 }
 
 func loadEnv() {
-	if !isEnvLoaded {
-		err := godotenv.Load()
-		if err != nil {
-			fmt.Println(".env file is not found, using env from os...")
+	if isEnvLoaded {
+		return
+	}
+	isEnvLoaded = true
+
+	// `go test ./...` menjalankan tiap package di direktorinya sendiri,
+	// jadi `.env` di root repo tidak ditemukan kalau hanya memakai CWD.
+	// Coba CWD dulu, lalu naik maksimal 5 level.
+	dir, err := os.Getwd()
+	if err != nil {
+		dir = "."
+	}
+	for i := 0; i < 5; i++ {
+		candidate := filepath.Join(dir, ".env")
+		if _, statErr := os.Stat(candidate); statErr == nil {
+			if loadErr := godotenv.Load(candidate); loadErr != nil {
+				fmt.Printf("gagal membaca %s: %v\n", candidate, loadErr)
+			}
+			return
 		}
-		isEnvLoaded = true
+		parent := filepath.Dir(dir)
+		if parent == dir {
+			break
+		}
+		dir = parent
 	}
 
+	fmt.Println(".env file is not found, using env from os...")
 }
 
 // getEnvOptional untuk env yang memang boleh kosong,
