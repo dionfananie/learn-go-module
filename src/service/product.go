@@ -8,10 +8,14 @@ import (
 	"learn-go/src/cache"
 	"learn-go/src/entities"
 	"learn-go/src/repository"
+	"log"
 	"time"
+
+	"golang.org/x/sync/singleflight"
 )
 
 const productCacheTTL = 5 * time.Minute
+const productLoadTimeout = 2 * time.Second
 
 func productCacheKey(id int) string {
 	return fmt.Sprintf("productId:%d", id)
@@ -21,6 +25,7 @@ type ProductService struct {
 	repo      *repository.ProductRepository
 	auditRepo *repository.AuditRepository
 	cache     *cache.Client
+	sf        singleflight.Group
 }
 
 func NewProductService(repo *repository.ProductRepository, auditRepo *repository.AuditRepository, cacheClient *cache.Client) *ProductService {
@@ -59,16 +64,36 @@ func (s *ProductService) GetProduct(ctx context.Context, id int) (*entities.Prod
 		return &cached, nil
 	}
 
-	product, err := s.repo.GetProduct(ctx, id)
-	if errors.Is(err, sql.ErrNoRows) {
-		return nil, ErrProductNotFound
+	// Do mengembalikan 3 nilai: value, error, dan shared (bool).
+	v, err, shared := s.sf.Do(key, func() (any, error) {
+		loadCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), productLoadTimeout)
+		defer cancel()
+
+		// Double-check: mungkin goroutine lain sudah mengisi cache.
+		var fresh entities.Product
+		if s.cache.GetJSON(loadCtx, key, &fresh) {
+			return &fresh, nil
+		}
+
+		product, err := s.repo.GetProduct(loadCtx, id)
+		if errors.Is(err, sql.ErrNoRows) {
+			return nil, ErrProductNotFound
+		}
+		if err != nil {
+			return nil, err
+		}
+
+		s.cache.SetJSON(loadCtx, key, product, productCacheTTL)
+		return product, nil
+	})
+	if shared {
+		log.Printf("[Singleflight]: %s menumpang hasil goroutine lain", key)
 	}
 	if err != nil {
 		return nil, err
 	}
 
-	s.cache.SetJSON(ctx, key, product, productCacheTTL)
-	return product, nil
+	return v.(*entities.Product), nil
 }
 
 func (s *ProductService) GetProductAuditLogs(ctx context.Context, productId int) ([]entities.AuditLog, error) {
