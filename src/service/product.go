@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"learn-go/src/cache"
 	"learn-go/src/entities"
+	"learn-go/src/message_broker/events"
 	"learn-go/src/repository"
 	"log"
 	"time"
@@ -26,11 +27,12 @@ type ProductService struct {
 	repo      *repository.ProductRepository
 	auditRepo *repository.AuditRepository
 	cache     *cache.Client
+	publisher events.Publisher
 	sf        singleflight.Group
 }
 
-func NewProductService(repo *repository.ProductRepository, auditRepo *repository.AuditRepository, cacheClient *cache.Client) *ProductService {
-	return &ProductService{repo: repo, auditRepo: auditRepo, cache: cacheClient}
+func NewProductService(repo *repository.ProductRepository, auditRepo *repository.AuditRepository, cacheClient *cache.Client, publisher events.Publisher) *ProductService {
+	return &ProductService{repo: repo, auditRepo: auditRepo, cache: cacheClient, publisher: publisher}
 }
 
 func (s *ProductService) Create(ctx context.Context, product *entities.Product, userId string) error {
@@ -157,7 +159,18 @@ func (s *ProductService) Transaction(ctx context.Context, productId int, delta i
 	if err := tx.Commit(); err != nil {
 		return nil, err
 	}
+	// set into cache
 	s.invalidateCache(ctx, productCacheKey(productId))
+	// put into message queue
+	s.publishStockChanged(events.StockChanged{
+		ProductID: productId,
+		UserID:    userId,
+		Action:    action,
+		OldStock:  oldStock,
+		NewStock:  newStock,
+		AuditID:   auditID,
+		At:        time.Now(),
+	})
 	return &AdjustStockResult{AuditID: auditID}, nil
 }
 
@@ -212,6 +225,9 @@ func (s *ProductService) TransferStock(ctx context.Context, fromId, toId int, am
 		return nil, err
 	}
 	s.invalidateCache(ctx, productCacheKey(fromId), productCacheKey(toId))
+	now := time.Now()
+	s.publishStockChanged(events.StockChanged{ProductID: fromId, UserID: userId, Action: "transfer_out", OldStock: fromOld, NewStock: fromNew, At: now})
+	s.publishStockChanged(events.StockChanged{ProductID: toId, UserID: userId, Action: "transfer_in", OldStock: toOld, NewStock: toNew, At: now})
 	return &TransferStockResult{FromOld: fromOld, FromNew: fromNew, ToOld: toOld, ToNew: toNew}, nil
 }
 
@@ -230,4 +246,19 @@ func (s *ProductService) invalidateCache(ctx context.Context, keys ...string) {
 		// jangan pakai ctx request: client bisa saja sudah disconnect.
 		s.cache.Delete(context.Background(), clone...)
 	})
+}
+
+// publishStockChanged mengirim event stok berubah ke broker. publisher nil
+// (mis. saat unit test) dilewati; error publish hanya di-log, tidak
+// menggagalkan operasi utama yang sudah commit (best-effort).
+func (s *ProductService) publishStockChanged(ev events.StockChanged) {
+	if s.publisher == nil {
+		return
+	}
+	// Jangan pakai ctx request: bisa saja sudah dibatalkan setelah commit.
+	pctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
+	if err := s.publisher.PublishStockChanged(pctx, ev); err != nil {
+		log.Printf("[events] publish stock_changed gagal: %v", err)
+	}
 }

@@ -23,6 +23,7 @@ var (
 	REDIS_ADDR     = getEnv("REDIS_ADDR", "localhost:6379")
 	REDIS_PASSWORD = getEnvOptional("REDIS_PASSWORD")
 	CACHE_TIMEOUT  = cacheTimeout()
+	RABBITMQ_URL   = getEnv("RABBITMQ_URL", "amqp://guest:guest@localhost:5672/")
 
 	JWT_SECRET = getEnv("JWT_SECRET", "")
 	JWT_EXP    = getEnv("JWT_EXP", "8h")

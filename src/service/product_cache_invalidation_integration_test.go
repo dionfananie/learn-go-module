@@ -104,7 +104,7 @@ func TestCacheInvalidationRace(t *testing.T) {
 
 	repo := repository.NewProductRepository(db)
 	auditRepo := repository.NewAuditRepository(db)
-	svc := NewProductService(repo, auditRepo, cache.New(rdb, 100*time.Millisecond))
+	svc := NewProductService(repo, auditRepo, cache.New(rdb, 100*time.Millisecond), nil)
 
 	// Warm-up supaya race terjadi pada key yang sudah ada.
 	if _, err := svc.GetProduct(ctx, pid); err != nil {
